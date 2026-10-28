@@ -2,28 +2,18 @@ package ch.nokillswit
 
 import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.auth.sso.LoginOptionsResponse
-import ch.nokillswit.auth.sso.SsoClockKey
-import ch.nokillswit.auth.sso.SsoExchangeRequest
-import ch.nokillswit.auth.sso.SsoHttpKey
 import ch.nokillswit.auth.sso.SsoStateCookie
 import ch.nokillswit.plugins.ProblemDetail
 import ch.nokillswit.users.UserResponse
 import ch.nokillswit.users.UserRole
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.http.setCookie
-import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import java.time.Clock
 import java.time.Instant
@@ -37,100 +27,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val START = "/api/v1/login/sso/start"
-private const val CALLBACK = "/api/v1/login/sso/callback"
-private const val EXCHANGE = "/api/v1/login/sso/exchange"
-private const val COOKIE = "toadie_sso"
-private const val HOST_COOKIE = "__Host-toadie_sso"
-private const val TEST_JWT_SECRET = "sso-test-jwt-secret-0123456789abcdef"
-private const val REDIRECT_URI = "http://localhost:8081/api/v1/login/sso/callback"
-
 /**
  * OIDC sign-in end to end against an in-process TLS stub issuer ([StubIdp]) injected through `SsoHttpKey`: the real routes,
  * real Postgres, the browser played by a client that does NOT follow redirects and carries the attempt cookie by hand.
  * Rules: `.claude/docs/security.md` "SSO login (OIDC)".
  */
 class SsoLoginTest {
-
-    private class Attempt(val cookie: String, val location: String)
-
-    private class SignIn(val attempt: Attempt, val callback: HttpResponse) {
-        val location: String get() = callback.headers[HttpHeaders.Location].orEmpty()
-        val code: String? get() = location.substringAfter("#code=", "").ifEmpty { null }
-        val error: String? get() = location.substringAfter("#sso_error=", "").ifEmpty { null }
-    }
-
-    private suspend fun ApplicationTestBuilder.ssoApp(
-        stub: StubIdp,
-        vararg overrides: Pair<String, String>,
-        clock: Clock? = null,
-        production: Boolean = false,
-    ) {
-        configureApp(
-            "sso.enabled" to "true",
-            "sso.issuer" to stub.issuer,
-            "sso.clientId" to stub.clientId,
-            "sso.clientSecret" to stub.clientSecret,
-            *overrides,
-        )
-        if (production) serverConfig { developmentMode = false }
-        application {
-            attributes.put(SsoHttpKey, stub.http())
-            if (clock != null) attributes.put(SsoClockKey, clock)
-        }
-        startApplication()
-    }
-
-    private fun ApplicationTestBuilder.browser(): HttpClient = createClient {
-        followRedirects = false
-        toadieTestClientDefaults()
-    }
-
-    private suspend fun HttpClient.start(): Attempt {
-        val response = get(START)
-        assertEquals(HttpStatusCode.Found, response.status)
-        val cookie = response.setCookie().first { it.name == COOKIE }.value
-        return Attempt(cookie, response.headers[HttpHeaders.Location].orEmpty())
-    }
-
-    private suspend fun HttpClient.callback(cookie: String?, query: String): HttpResponse = get("$CALLBACK?$query") {
-        cookie?.let { header(HttpHeaders.Cookie, "$COOKIE=$it") }
-    }
-
-    private suspend fun HttpClient.exchange(code: String, cookie: String?): HttpResponse = post(EXCHANGE) {
-        contentType(ContentType.Application.Json)
-        setBody(SsoExchangeRequest(code))
-        cookie?.let { header(HttpHeaders.Cookie, "$COOKIE=$it") }
-    }
-
-    /** start -> provider -> callback, with the claims/overrides of [authorize]. */
-    private suspend fun HttpClient.signIn(
-        stub: StubIdp,
-        claims: Map<String, Any?> = emptyMap(),
-        authorize: (Attempt) -> String = { stub.authorize(it.location, claims) },
-    ): SignIn {
-        val attempt = start()
-        return SignIn(attempt, callback(attempt.cookie, authorize(attempt)))
-    }
-
-    private suspend fun HttpClient.signInAndExchange(stub: StubIdp, claims: Map<String, Any?> = emptyMap()): LoginResponse {
-        val result = signIn(stub, claims)
-        val code = assertNotNull(result.code, "expected a success redirect, got ${result.location}")
-        val response = exchange(code, result.attempt.cookie)
-        assertEquals(HttpStatusCode.OK, response.status)
-        return response.body()
-    }
-
-    private suspend fun HttpClient.assertRefused(result: SignIn, error: String) {
-        assertEquals(HttpStatusCode.Found, result.callback.status)
-        assertEquals("/login#sso_error=$error", result.location)
-        assertNull(result.code)
-    }
-
-    private fun stateOf(attempt: Attempt): String = StubIdp.queryOf(attempt.location).getValue("state")
-
-    private fun failureOf(capture: LogCapture, reason: String) =
-        capture.events.firstOrNull { it.message == "login.sso_failure" && it.hasKeyValue("reason", reason) }
 
     // ---- the happy paths ---------------------------------------------------------------------------------------------------
 

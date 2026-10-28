@@ -865,6 +865,68 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/users/{id}/sso:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    delete:
+      tags: [users]
+      operationId: unlinkUserSso
+      summary: Unlink a user's single sign-on identity (ADMIN only)
+      description: |
+        ADMIN only. Clears the account's external identity (issuer + subject) and advances the
+        credential version in one step, so every outstanding session of the target ends and a
+        sign-in already past the callback can no longer exchange its code (one still at the
+        identity provider simply links again by email under the ordinary rule). The account
+        itself, its role and its password (if any) are untouched. Idempotence is deliberately not
+        offered: an account with no linked identity answers `404`, so a stale "Unlink" never looks
+        like a success.
+
+        **Re-linking.** Nothing is remembered: the next SSO sign-in whose verified email matches
+        the account links it again under the ordinary rule (never an ADMIN, never an account with
+        MFA enabled, never one linked to another identity). A new subject for the same email is
+        therefore "unlink, then sign in".
+
+        **A passwordless account** (`hasPassword` false, SSO-only) can be unlinked: until the
+        person signs in through the provider again, or an administrator sets a password, nobody
+        can sign in to it. The exception is a passwordless ADMIN or MFA-enabled account: those
+        never link again by email, so unlinking them would lock them out and is refused with
+        `409` (`urn:toadie:password-not-set`) until a password is set.
+
+        **The one documented exception on `/users/{id}`:** the row may be SOFT-DELETED. A deleted
+        account keeps its link and so keeps refusing that identity at sign-in (`account_deleted`
+        in the `login.sso_failure` audit event, which carries the row's `userId`); unlinking it
+        releases the identity, which then signs in under the ordinary rule: it links to an
+        active same-email account if one exists, otherwise a new account is created. A deleted
+        row without a link, and a service account (never linked), are a plain `404`.
+
+        Unlinking YOUR OWN identity is a `403`, decided before any lookup. The route is available
+        whether or not SSO is currently enabled. Audited as `user.sso_unlinked`.
+      responses:
+        '204': { description: Unlinked }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Caller is not ADMIN, or attempted to unlink their own identity
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: >-
+            No such user (or a service account, or a deleted user without a link), or the user
+            has no single sign-on identity linked.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: >-
+            The account has no password and is an ADMIN or has MFA enabled, so it would never
+            link again by email and the unlink would lock it out — problem type
+            `urn:toadie:password-not-set`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/users/{id}/password:
     parameters:
       - $ref: '#/components/parameters/ResourceId'

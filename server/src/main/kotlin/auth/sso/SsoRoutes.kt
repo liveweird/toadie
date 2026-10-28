@@ -89,7 +89,6 @@ fun Application.configureSso() {
         seenStates = SsoSeenStates(clock = { clock.millis() }),
         handoffs = handoffs,
         accounts = SsoAccounts(users),
-        users = users,
         // The class name only (the observability.md rule): a database or driver message can quote data.
         onFailureLog = { cause -> log.warn("SSO callback failed unexpectedly ({})", cause.javaClass.name) },
     )
@@ -141,6 +140,7 @@ fun Application.configureSso() {
                         "email" to failure.email,
                         "sub" to failure.subject,
                         "host" to failure.host,
+                        "userId" to failure.userId?.toLong(),
                     )
                     // A request that did not prove it owns the attempt (state mismatch, replay) leaves the cookie alone.
                     if (failure.clearCookie) call.clearAttemptCookie()

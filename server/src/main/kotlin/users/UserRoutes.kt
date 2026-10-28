@@ -35,6 +35,7 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
+import java.net.URI
 import kotlinx.serialization.Serializable
 
 /** Audit format for a roles/features set: comma-joined sorted names, "" = empty set. */
@@ -71,6 +72,10 @@ class Users {
         @Serializable
         @Resource("password")
         class Password(val parent: Id)
+
+        @Serializable
+        @Resource("sso")
+        class Sso(val parent: Id)
 
         @Serializable
         @Resource("features")
@@ -218,6 +223,31 @@ fun Application.configureUserRoutes() {
                     "user.deleted",
                     "byUserId" to caller.userId.toLong(),
                     "targetUserId" to route.id.toLong(),
+                )
+                call.respond(HttpStatusCode.NoContent)
+            }
+            // Registered whether or not SSO is enabled: a row linked while it was on stays releasable after it is switched off.
+            delete<Users.Id.Sso> { route ->
+                val caller = call.caller()
+                requireAdmin(caller)
+                // Before any read, like the delete above: releasing your own identity mid-session is a lockout footgun.
+                if (caller.userId == route.parent.id) {
+                    throw ForbiddenException("You cannot unlink your own single sign-on identity")
+                }
+                val unlinked = when (val verdict = userService.unlinkSso(route.parent.id)) {
+                    SsoUnlink.NotFound -> throw NotFoundException("User not found")
+                    SsoUnlink.NotLinked -> throw NotFoundException("No single sign-on identity is linked to this user")
+                    // An ADMIN or MFA-enabled account never re-links by email: without a password it would be locked out.
+                    SsoUnlink.PasswordRequired -> throw PasswordNotSetException()
+                    is SsoUnlink.Unlinked -> verdict
+                }
+                audit(
+                    "user.sso_unlinked",
+                    "byUserId" to caller.userId.toLong(),
+                    "targetUserId" to route.parent.id.toLong(),
+                    // The host of the STORED issuer (the link's own), never the URL.
+                    "issuerHost" to unlinked.previous.ssoIssuer?.let { runCatching { URI(it).host }.getOrNull() },
+                    "deleted" to unlinked.wasDeleted,
                 )
                 call.respond(HttpStatusCode.NoContent)
             }

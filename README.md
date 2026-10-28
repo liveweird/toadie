@@ -174,6 +174,22 @@ and the log says which setting is the problem.
 - Accounts created through Okta have no password, so "Change password" is hidden for them. Roles
   are still managed in Toadie's Users page.
 - Deleting a user who signed in with Okta also blocks that Okta identity from signing in again.
+- To detach an account from its Okta identity, an administrator picks **Unlink SSO identity** in the
+  account's menu on the Users page. This ends the account's sessions at once. Three cases:
+  - *The person has a new Okta subject but the same email* (the Okta account was recreated): unlink,
+    and their next Okta sign-in links the account again, because linking goes by email.
+  - *Detach for good*: unlinking alone is not enough, since the next Okta sign-in with the same email
+    links the account again. First turn on email MFA for the account (MFA accounts are never linked
+    by an Okta email) or unassign the person from the Okta application, then unlink. A passwordless
+    administrator or MFA-enabled account cannot be unlinked until it has a password (the request is
+    refused with `409`): such accounts never re-link by Okta email, so it would lock them out.
+  - *Re-admit an identity that was blocked by deleting its user*: a deleted user's Okta identity stays
+    reserved. The refused sign-in's `login.sso_failure` audit event (reason `account_deleted`) carries
+    the deleted account's `userId`; release it with
+    `curl -X DELETE -H "Authorization: Bearer <admin token>" https://<host>/api/v1/users/<userId>/sso`
+    (an administrator's access token; 204 on success), and the next Okta sign-in creates a fresh
+    account.
+  Unlinking your own account is refused; ask another administrator.
 - Signing out of Toadie does not sign you out of Okta.
 - Keep at least one administrator with a password: if Okta is down and every administrator signs in
   only through it, nobody can get in as admin (details in the security rules linked below).

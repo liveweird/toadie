@@ -4,10 +4,11 @@ import { Link as RouterLink, Navigate } from "react-router-dom";
 import { Alert, Badge, Button, Group, Menu, Modal, Select, Stack, Table, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconKey, IconPencil, IconPlus, IconToggleLeft, IconTrash, IconUsers } from "@tabler/icons-react";
+import { IconKey, IconPencil, IconPlus, IconToggleLeft, IconTrash, IconUnlink, IconUsers } from "@tabler/icons-react";
 import { deleteUser, listUsers, type UserResponse } from "../api/users";
 import { getUserId, isAdmin } from "../api/session";
 import ClearableTextInput from "../components/ClearableTextInput";
+import ConfirmActionModal from "../components/ConfirmActionModal";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
 import FilterPanel from "../components/FilterPanel";
@@ -19,6 +20,7 @@ import TableLoadingRow from "../components/TableLoadingRow";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 import { usePagedSort } from "../hooks/usePagedSort";
 import { useResetPassword } from "../hooks/useResetPassword";
+import { useUnlinkSso } from "../hooks/useUnlinkSso";
 import { isString, useStoredState } from "../hooks/useStoredState";
 import { loadErrorMessage, saveErrorMessage } from "../utils/saveError";
 import PageHeader from "../components/PageHeader";
@@ -70,6 +72,8 @@ export default function Users() {
 
   // The reset flow: confirm → generate client-side → PUT → the one-time reveal modal.
   const reset = useResetPassword();
+  // The unlink flow: confirm → DELETE …/sso → toast + list refresh (a passwordless row warns).
+  const unlink = useUnlinkSso();
 
   if (!isAdmin()) return <Navigate to="/" replace />;
 
@@ -218,6 +222,15 @@ export default function Users() {
                             >
                               {t("users.resetPassword")}
                             </Menu.Item>
+                            {user.sso && (
+                              <Menu.Item
+                                leftSection={<IconUnlink size={14} />}
+                                onClick={() => unlink.request(user)}
+                                aria-label={t("users.unlinkSsoAria", { name: user.name })}
+                              >
+                                {t("users.unlinkSso")}
+                              </Menu.Item>
+                            )}
                             <Menu.Item
                               color="red"
                               leftSection={<IconTrash size={14} />}
@@ -301,6 +314,34 @@ export default function Users() {
           </Stack>
         )}
       </Modal>
+
+      <ConfirmActionModal
+        opened={unlink.target !== null}
+        onClose={unlink.clearTarget}
+        title={t("users.unlinkTitle")}
+        message={
+          <>
+            {unlink.target &&
+              t(unlink.target.hasPassword ? "users.unlinkBody" : "users.unlinkBodyNoPassword", {
+                name: unlink.target.name,
+                email: unlink.target.email,
+              })}
+            {unlink.error && (
+              <Text span c="red" display="block" mt="sm" role="alert">
+                <Text span fw={600}>
+                  {t("users.unlinkFailedTitle")}
+                </Text>
+                {": "}
+                {unlink.error}
+              </Text>
+            )}
+          </>
+        }
+        cancelLabel={t("common.action.cancel")}
+        confirmLabel={t("users.unlinkConfirm")}
+        onConfirm={() => void unlink.confirm()}
+        loading={unlink.pending}
+      />
 
       <OneTimePasswordModal
         reveal={reset.revealed}

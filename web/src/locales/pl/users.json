@@ -22,6 +22,15 @@
   "deleteUndone": "Ta osoba nie będzie już mogła się zalogować; jej pliki katalogu pozostaną.",
   "deleteFailed": "Nie udało się usunąć konta",
   "lastAdminError": "Nie można usunąć ostatniego konta administracyjnego.",
+  "unlinkSso": "Odłącz tożsamość SSO",
+  "unlinkSsoAria": "Odłącz tożsamość SSO dla {{name}}",
+  "unlinkTitle": "Odłączyć tożsamość SSO?",
+  "unlinkBody": "Odłączyć konto \"{{name}}\" ({{email}}) od jego tożsamości w logowaniu jednokrotnym? Sesje tej osoby kończą się teraz, a następne logowanie przez SSO tym adresem e-mail połączy konto ponownie.",
+  "unlinkBodyNoPassword": "Odłączyć konto \"{{name}}\" ({{email}}) od jego tożsamości w logowaniu jednokrotnym? Sesje tej osoby kończą się teraz. To konto nie ma hasła: dopóki ta osoba nie zaloguje się ponownie przez SSO albo nie ustawisz hasła, nikt nie zaloguje się na to konto.",
+  "unlinkConfirm": "Odłącz",
+  "unlinkFailedTitle": "Nie udało się odłączyć tożsamości SSO",
+  "unlinkNeedsPassword": "Najpierw ustaw hasło dla tego konta: konto administratora lub z włączonym MFA nigdy nie łączy się ponownie przez logowanie jednokrotne.",
+  "unlinkGone": "To konto nie ma już powiązanej tożsamości SSO (albo już nie istnieje).",
   "resetTitle": "Zresetować hasło?",
   "resetBody": "Wygenerować nowe hasło dla \"{{name}}\"? Dotychczasowe hasło natychmiast przestanie działać.",
   "resetConfirm": "Zresetuj",
@@ -59,6 +68,7 @@
   "toast": {
     "saved": "Zaktualizowano konto",
     "deleted": "Usunięto konto",
+    "ssoUnlinked": "Odłączono tożsamość SSO",
     "passwordChangedSignIn": "Zmieniono hasło. Zaloguj się ponownie na każdym urządzeniu.",
     "featuresSaved": "Zapisano flagi funkcji"
   },

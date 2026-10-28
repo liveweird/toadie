@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.r2dbc.R2dbcDatabase
 import org.jetbrains.exposed.v1.r2dbc.deleteWhere
 import org.jetbrains.exposed.v1.r2dbc.insert
@@ -361,10 +362,37 @@ object TestUsers {
         }
     }
 
+    /** The stored SSO subject, deleted rows included (`service.read` hides them). */
+    suspend fun rawSsoSubject(id: UInt): String? = suspendTransaction(sharedTestDatabase) {
+        UserService.Users.selectAll().where { UserService.Users.id eq id }
+            .map { it[UserService.Users.ssoSubject] }.toList().single()
+    }
+
     /** The raw stored hash (null = passwordless), bypassing the `human()` filtering. */
     suspend fun rawPasswordHash(id: UInt): String? = suspendTransaction(sharedTestDatabase) {
         UserService.Users.selectAll().where { UserService.Users.id eq id }
             .map { it[UserService.Users.passwordHash] }.toList().single()
+    }
+
+    /**
+     * The row-level steps of [UserService.unlinkSso] with a pause in the middle: locks the row (FOR UPDATE), runs [whileLocked]
+     * (the test holds the lock open there, given this transaction's backend pid so it can observe a contender blocked behind it
+     * through `pg_blocking_pids`), then clears the SSO pair and bumps `auth_version`, committing at the end. Lets a test order a
+     * concurrent reader deterministically against an unlink.
+     */
+    suspend fun unlinkHoldingLock(id: UInt, whileLocked: suspend (holderPid: Int) -> Unit) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.selectAll().where { UserService.Users.id eq id }.forUpdate().toList()
+            val pid = exec("SELECT pg_backend_pid()", explicitStatementType = StatementType.SELECT) { row ->
+                row.get(0, java.lang.Integer::class.java)!!.toInt()
+            }?.toList()?.single() ?: error("pg_backend_pid() returned no row")
+            whileLocked(pid)
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.ssoIssuer] = null
+                it[UserService.Users.ssoSubject] = null
+                it[UserService.Users.authVersion] = UserService.Users.authVersion + 1
+            }
+        }
     }
 
     /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */

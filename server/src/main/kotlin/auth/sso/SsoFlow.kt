@@ -4,7 +4,6 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.infra.catchingFailures
 import ch.nokillswit.infra.fetch.OperatorHttp
 import ch.nokillswit.infra.fetch.OperatorHttpException
-import ch.nokillswit.users.UserService
 import io.ktor.http.URLBuilder
 import java.net.URI
 import java.security.MessageDigest
@@ -21,6 +20,7 @@ internal fun ssoErrorLocation(error: String): String = "/login#sso_error=$error"
 /**
  * A sign-in attempt that ends at the error redirect. [reason] is the precise `login.sso_failure` audit reason; [error] is
  * the coarse, user-facing `sso_error` code. [email] and [subject] are set only once the ID token's signature verified.
+ * [userId] is the soft-deleted account of an `account_deleted` refusal (the row an admin releases).
  * [host] is the unreachable issuer-side host of an `idp_unavailable` failure (never a URL). [clearCookie] is false when the
  * request did not prove it owns the attempt (a state mismatch or replay): such a request must leave the browser's valid
  * attempt cookie alone, or a forged cross-site callback would kill the victim's in-flight sign-in.
@@ -33,6 +33,7 @@ class SsoFlowException(
     cause: Throwable? = null,
     val host: String? = null,
     val clearCookie: Boolean = true,
+    val userId: UInt? = null,
 ) : RuntimeException("SSO sign-in failed: $reason", cause)
 
 /** A successful callback: the one-time [code] for the fragment redirect (the account is already resolved). */
@@ -52,7 +53,6 @@ class SsoFlow(
     private val seenStates: SsoSeenStates,
     private val handoffs: SsoHandoffs,
     private val accounts: SsoAccounts,
-    private val users: UserService,
     private val onFailureLog: (Throwable) -> Unit = {},
 ) {
     fun newAttempt(): SsoAttempt = cookies.newAttempt()
@@ -96,12 +96,12 @@ class SsoFlow(
         val resolved = try {
             accounts.resolve(config.issuer, token)
         } catch (refusal: SsoAccountRefusedException) {
-            throw SsoFlowException(refusal.reason, SSO_ERROR_NOT_ALLOWED, token.email, token.subject, refusal)
+            throw SsoFlowException(refusal.reason, SSO_ERROR_NOT_ALLOWED, token.email, token.subject, refusal, userId = refusal.userId)
         }
         auditAccount(resolved, token)
-        val user = users.read(resolved.userId)
-            ?: throw SsoFlowException("account_deleted", SSO_ERROR_NOT_ALLOWED, token.email, token.subject)
-        SsoCallbackResult(handoffs.issue(resolved.userId, user.authVersion, bindHash(attempt.bind), resolved.outcome))
+        // The version comes from the resolving transaction itself: a second read could see a later unlink's bump
+        // and hand a session to an unlinked row.
+        SsoCallbackResult(handoffs.issue(resolved.userId, resolved.authVersion, bindHash(attempt.bind), resolved.outcome))
     }
 
     /** The token endpoint exchange (`client_secret_basic` + the PKCE verifier); returns the raw `id_token`. */
