@@ -650,8 +650,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`sso.spec.ts`](scenarios/sso.md) — single sign-on through the stub identity provider
   (`e2e/stub-idp`, the `e2e/compose.sso.yaml` overlay): a new email signs in from a deep link and
   gets a passwordless account the admin sees badged SSO; the same email as a password account is
-  linked and keeps its password; cancelling at the provider shows the alert; an administrator
-  account is refused. Skips when `/api/v1/login/options` has no SSO locally; fails in CI.
+  linked and keeps its password; an administrator unlinks an SSO account from its Users row
+  and its next SSO sign-in links it again; cancelling at the provider shows the alert; an
+  administrator account is refused. Skips when `/api/v1/login/options` has no SSO locally; fails in CI.
 - [`types.spec.ts`](scenarios/types.md) — the per-kind type dictionaries: seeded rows → modal
   validation → append a unique type to the Domain dictionary → the regular user's read-only
   view → the editor's Type Select on a new Domain file → restore; the type registry's only

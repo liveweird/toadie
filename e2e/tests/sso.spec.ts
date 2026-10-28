@@ -5,6 +5,8 @@ import {
   expect,
   login,
   openFilters,
+  readyDialog,
+  rowOperation,
   signOut,
   test,
   uniqueText,
@@ -114,6 +116,51 @@ test("an SSO sign-in links to the password account with the same email, which ke
   const row = await usersRow(page, user.name);
   await expect(row.getByText("SSO", { exact: true })).toBeVisible();
   await deleteUserRow(page, user.name);
+});
+
+test("an administrator unlinks an SSO account, which links again on its next SSO sign-in", async ({
+  page,
+  request,
+}) => {
+  await requireSso(request);
+  const sso = ssoIdentity("E2E-SsoUnlink");
+
+  // The identity signs in once: the account is created and linked, with no password.
+  await page.goto("/login");
+  await openStubSignIn(page);
+  await continueAsStubUser(page, sso);
+  await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
+  await signOut(page);
+
+  // The administrator unlinks it from the Users row, through the passwordless confirm variant.
+  await login(page);
+  let row = await usersRow(page, sso.name);
+  await expect(row.getByText("SSO", { exact: true })).toBeVisible();
+  await rowOperation(page, sso.name, `Unlink SSO identity for ${sso.name}`);
+  const dialog = await readyDialog(page, "Unlink SSO identity?");
+  await expect(dialog.getByText(/nobody can sign in to it/)).toBeVisible();
+  const unlinked = page.waitForResponse(
+    (r) => r.url().endsWith("/sso") && r.request().method() === "DELETE",
+  );
+  await dialog.getByRole("button", { name: "Unlink", exact: true }).click();
+  expect((await unlinked).status()).toBe(204);
+  await expect(dialog).toBeHidden();
+  // The link is gone; the account never had a password, so that marker stays.
+  await expect(row.getByText("SSO", { exact: true })).toHaveCount(0);
+  await expect(row.getByText("No password", { exact: true })).toBeVisible();
+  await signOut(page);
+
+  // The same identity signs in again: the email rule links the unlinked account once more.
+  await page.goto("/login");
+  await openStubSignIn(page);
+  await continueAsStubUser(page, sso);
+  await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
+  await signOut(page);
+
+  await login(page);
+  row = await usersRow(page, sso.name);
+  await expect(row.getByText("SSO", { exact: true })).toBeVisible();
+  await deleteUserRow(page, sso.name);
 });
 
 test("cancelling at the identity provider returns to the sign-in page with a message", async ({ page, request }) => {

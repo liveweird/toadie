@@ -37,6 +37,23 @@ that loses the overlay cannot go green (the Mailpit rule in `mfa.md`).*
    - *Expected*: the row keeps the account's original name and now carries the **SSO** badge.
      The administrator deletes the account.
 
+## Scenario: an administrator unlinks an SSO account, which links again on its next SSO sign-in
+
+1. A fresh identity signs in through **Sign in with Okta** (creating a passwordless, linked
+   account) and signs out.
+2. The administrator opens the Users list, filters to that name, and from the row's **Operations**
+   menu chooses **Unlink SSO identity for <name>**.
+   - *Expected*: the confirm dialog "Unlink SSO identity?" carries the passwordless warning
+     (nobody can sign in to the account until the person signs in through SSO again or a password
+     is set).
+3. The administrator presses **Unlink**.
+   - *Expected*: `DELETE /api/v1/users/<id>/sso` answers 204, the dialog closes, the row loses its
+     **SSO** badge and keeps **No password**.
+4. The administrator signs out; the same identity goes through **Sign in with Okta** again.
+   - *Expected*: they are signed in (the unlinked account is linked once more by its email).
+5. The administrator looks at the Users list again.
+   - *Expected*: the **SSO** badge is back on the row. The administrator deletes the account.
+
 ## Scenario: cancelling at the identity provider returns to the sign-in page with a message
 
 1. From the sign-in page the visitor presses **Sign in with Okta** and chooses **Cancel** on the
@@ -59,6 +76,10 @@ that loses the overlay cannot go green (the Mailpit rule in `mfa.md`).*
   unverified email, replayed state or hand-off, MFA accounts, domain allow-list, the race on a
   first sign-in) - server-tested (`SsoLoginTest`, `IdTokenVerifierTest`, `SsoStoresTest`,
   `SsoConfigTest`); the stub never misbehaves on purpose.
+- **Releasing a deleted account's identity** (`DELETE /api/v1/users/<id>/sso` against a soft-deleted
+  row, the id taken from the `login.sso_failure` event), self-unlink and the not-linked 404 -
+  server-tested (`SsoUnlinkTest`); the Users list never shows a deleted row, so there is no UI to
+  drive.
 - **A real Okta tenant** - the manual tenant check is in the run-stack runbook ("Enable Okta SSO").
 - **The SPA's callback failure states** (invalid or reused link, throttled exchange) - unit-tested
   (`SsoCallback.test.tsx`, `Login.test.tsx`).

@@ -88,6 +88,18 @@ application. Administrator accounts and accounts with email MFA are never linked
 Okta email - they keep password login. Signing out of Toadie does not sign out of Okta. Keep at least one ADMIN with a password so admin access survives an Okta outage
 (`.claude/docs/security.md` "SSO login (OIDC)", accepted risks).
 
+**Unlinking an identity.** In the Users list, the account's Operations menu has **Unlink SSO identity**
+(not on your own row; a passwordless account gets an extra warning). It clears the stored Okta subject and
+ends the account's sessions. The three cases:
+- *New Okta subject, same email* (the Okta user was recreated): unlink; the next Okta sign-in links the
+  account again by email.
+- *Detach for good*: unlink AND either enable email MFA on the account (MFA accounts are never linked by an
+  Okta email) or unassign the person from the Okta application - otherwise the next sign-in re-links it.
+- *Re-admit an identity blocked by deleting its user*: find the refused attempt's `login.sso_failure` event
+  (`reason=account_deleted`, it carries `userId`) in the server log, then
+  `curl -X DELETE -H "Authorization: Bearer <admin access token>" https://<host>/api/v1/users/<userId>/sso`
+  (204). There is no UI for this; the next Okta sign-in creates a fresh account.
+
 **Local end-to-end proof without Okta.** `e2e/compose.sso.yaml` is an overlay (e2e/CI only, never the
 long-lived stack) that adds a stub OIDC provider (`e2e/stub-idp/server.mjs`, port 18090) and turns SSO on.
 Run it from the repo root, with the base file first, on a disposable project:
