@@ -3,6 +3,7 @@ package ch.nokillswit
 import ch.nokillswit.auth.LoginResponse
 import ch.nokillswit.auth.LogoutResponse
 import ch.nokillswit.auth.RefreshRequest
+import ch.nokillswit.auth.sso.SsoSignOutDeadlineKey
 import com.auth0.jwt.JWT
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -14,7 +15,10 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.log
 import io.ktor.server.testing.testApplication
 import java.sql.DriverManager
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -261,24 +265,79 @@ class SsoSignOutTest {
     }
 
     @Test
-    fun `an unreadable discovery document is a 204 audited as unavailable, after the session was already revoked`() = testApplication {
-        StubIdp().use { stub ->
-            advertise(stub)
-            val clock = MovableClock()
-            ssoApp(stub, clock = clock)
-            val session = browser().signInAndExchange(stub)
-            val client = jsonClient()
-            stub.discoveryStatus = 503
-            // Beyond the TTL plus the 24 h staleness bound: no usable copy is left.
-            clock.advanceSeconds(26 * 3600)
-            withAuditCapture { audit ->
-                val response = client.logout(session)
-                assertEquals(HttpStatusCode.NoContent, response.status)
-                assertTrue(logoutEventOf(audit, session.userId).hasKeyValue("sso", "unavailable"))
-                assertNoLeak(audit)
+    fun `an unreadable discovery document is a 204 audited as unavailable after revocation, with one leak-free warning`() =
+        testApplication {
+            StubIdp().use { stub ->
+                advertise(stub)
+                val clock = MovableClock()
+                ssoApp(stub, clock = clock)
+                val session = browser().signInAndExchange(stub)
+                val retained = assertNotNull(storedIdToken(session.userId))
+                val client = jsonClient()
+                stub.discoveryStatus = 503
+                // Beyond the TTL plus the 24 h staleness bound: no usable copy is left.
+                clock.advanceSeconds(26 * 3600)
+                val appLog = LogCapture(application.log.name)
+                try {
+                    withAuditCapture { audit ->
+                        val response = client.logout(session)
+                        assertEquals(HttpStatusCode.NoContent, response.status)
+                        assertTrue(logoutEventOf(audit, session.userId).hasKeyValue("sso", "unavailable"))
+                        assertNoLeak(audit)
+                    }
+                    assertEquals(0, sessionRows(session.userId))
+                    assertEquals(HttpStatusCode.Unauthorized, client.logout(session).status)
+                    val warnings = appLog.events.filter { "sign-out unavailable" in it.formattedMessage }
+                    assertEquals(1, warnings.size)
+                    val text = warnings.single().formattedMessage
+                    assertTrue("SsoUpstreamException" in text)
+                    assertTrue(retained !in text && "127.0.0.1" !in text && "id_token_hint" !in text && "http" !in text, "no token, no URL")
+                } finally {
+                    appLog.detach()
+                }
             }
-            assertEquals(0, sessionRows(session.userId))
-            assertEquals(HttpStatusCode.Unauthorized, client.logout(session).status)
         }
-    }
+
+    @Test
+    fun `a hung identity provider ends the provider step at the deadline - a 204 audited as unavailable`() =
+        testApplication {
+            StubIdp().use { stub ->
+                advertise(stub)
+                val clock = MovableClock()
+                ssoApp(stub, clock = clock)
+                application.attributes.put(SsoSignOutDeadlineKey, 300.milliseconds)
+                val session = browser().signInAndExchange(stub)
+                val retained = assertNotNull(storedIdToken(session.userId))
+                val client = jsonClient()
+                // The cached document expires, and the refresh never answers until the test lets it.
+                clock.advanceSeconds(2 * 3600)
+                val release = CountDownLatch(1)
+                val answered = AtomicInteger()
+                stub.onDiscovery = {
+                    release.await(30, TimeUnit.SECONDS)
+                    answered.incrementAndGet()
+                }
+                val appLog = LogCapture(application.log.name)
+                try {
+                    withAuditCapture { audit ->
+                        val response = client.logout(session)
+                        // The response came while the provider was still holding the request: the deadline ended it,
+                        // not the provider's answer and not OperatorHttp's own 10 s.
+                        assertEquals(0, answered.get())
+                        assertEquals(HttpStatusCode.NoContent, response.status)
+                        assertTrue(logoutEventOf(audit, session.userId).hasKeyValue("sso", "unavailable"))
+                        assertNoLeak(audit, retained)
+                    }
+                    assertEquals(0, sessionRows(session.userId))
+                    assertEquals(HttpStatusCode.Unauthorized, client.logout(session).status)
+                    val warnings = appLog.events.filter { "sign-out unavailable" in it.formattedMessage }
+                    assertEquals(1, warnings.size)
+                    val text = warnings.single().formattedMessage
+                    assertTrue(retained !in text && "127.0.0.1" !in text && "id_token_hint" !in text && "http" !in text, "no token, no URL")
+                } finally {
+                    release.countDown()
+                    appLog.detach()
+                }
+            }
+        }
 }

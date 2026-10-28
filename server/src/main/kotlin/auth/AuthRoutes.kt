@@ -82,7 +82,10 @@ data class LogoutRequest(val refreshToken: String? = null)
  * SPA navigates to so the provider's own session ends too. Carries the ID token as `id_token_hint` — never log or audit it.
  */
 @Serializable
-data class LogoutResponse(val endSessionUrl: String)
+class LogoutResponse(val endSessionUrl: String) {
+    // A plain class, not a data class: the generated toString would print the URL, which embeds the ID token.
+    override fun toString(): String = "LogoutResponse"
+}
 
 @Serializable
 data class LoginResponse(
@@ -400,7 +403,8 @@ fun Application.configureAuthRoutes() {
                 }
                 // The whole family is already revoked, including superseded refresh tokens.
                 // Keep optional per-token blocklisting for compatibility and defense in depth.
-                // Best-effort by design (logout always answers 204), but the failures are NARROW
+                // Best-effort by design (logout always revokes and answers 2xx — 200 with the provider's
+                // end-session URL for an SSO session, 204 otherwise), but the failures are NARROW
                 // and logged — a blanket catch would silently skip revocation on unrelated errors
                 // and swallow coroutine cancellation.
                 val body = try {
@@ -443,7 +447,8 @@ fun Application.configureAuthRoutes() {
                         blocklist.revoke(rjti, decoded.expiresAt?.time ?: System.currentTimeMillis())
                     }
                 }
-                // Only a session that held an ID token is an SSO session we can sign out of the provider; absent `sso` = none held.
+                // Only a session that held an ID token is an SSO session we can sign out of the provider; `sso` is null = none held.
+                // The seam runs under NonCancellable with a short deadline and never throws for a provider problem.
                 val signOut = idToken?.let { token ->
                     call.application.attributes.getOrNull(ProviderSignOutKey)?.endSessionUrl(token) ?: ProviderSignOutResult.Unsupported
                 }

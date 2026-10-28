@@ -8,6 +8,11 @@ import ch.nokillswit.infra.fetch.OperatorHttpException
 import io.ktor.http.URLBuilder
 import java.net.URI
 import java.security.MessageDigest
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** The `sso_error` fragment values the SPA understands (`/login#sso_error=<value>`). */
 internal const val SSO_ERROR_CANCELLED = "cancelled"
@@ -37,6 +42,12 @@ class SsoFlowException(
     val userId: UInt? = null,
 ) : RuntimeException("SSO sign-in failed: $reason", cause)
 
+/**
+ * The most a logout waits for the provider step (discovery read). A hung IdP must not hold the sign-out for
+ * [OperatorHttp]'s own 10 s; past this the logout is local only (`sso=unavailable`).
+ */
+internal val SIGN_OUT_DEADLINE: Duration = 3.seconds
+
 /** A successful callback: the one-time [code] for the fragment redirect (the account is already resolved). */
 class SsoCallbackResult(val code: String)
 
@@ -55,6 +66,10 @@ class SsoFlow(
     private val handoffs: SsoHandoffs,
     private val accounts: SsoAccounts,
     private val onFailureLog: (Throwable) -> Unit = {},
+    /** The provider step's deadline, read per logout (a test publishes a short one after the module loaded). */
+    private val signOutDeadline: () -> Duration = { SIGN_OUT_DEADLINE },
+    /** Called once per [ProviderSignOutResult.Unavailable] logout with a safe cause description (class name, failure kind). */
+    private val onSignOutUnavailable: (String) -> Unit = {},
 ) {
     fun newAttempt(): SsoAttempt = cookies.newAttempt()
 
@@ -110,25 +125,40 @@ class SsoFlow(
 
     /**
      * The provider's end-session location for [idToken] (OIDC RP-initiated logout): `id_token_hint` plus our
-     * `post_logout_redirect_uri`, no `state`. Never throws for a provider problem — an unreadable discovery is
-     * [ProviderSignOutResult.Unavailable] — and never logs the token or the URL; cancellation propagates unchanged.
+     * `post_logout_redirect_uri`, no `state`. Never throws for a provider problem — an unreadable or too slow discovery
+     * is [ProviderSignOutResult.Unavailable] — and never logs the token or the URL. It runs under [NonCancellable] and
+     * a [signOutDeadline]: the session is already revoked, so a client that hung up must not skip the caller's `logout`
+     * audit, and a hung IdP must not hold the logout.
      */
-    suspend fun endSessionUrl(idToken: String): ProviderSignOutResult = catchingFailures(
-        {
-            val endpoint = discovery.endpoints().endSessionEndpoint
-            if (endpoint == null) {
-                ProviderSignOutResult.Unsupported
-            } else {
-                ProviderSignOutResult.Redirect(
-                    URLBuilder(endpoint).apply {
-                        parameters.append("id_token_hint", idToken)
-                        parameters.append("post_logout_redirect_uri", config.postLogoutRedirectUri)
-                    }.buildString(),
-                )
-            }
-        },
-        { ProviderSignOutResult.Unavailable },
-    )
+    suspend fun endSessionUrl(idToken: String): ProviderSignOutResult = withContext(NonCancellable) {
+        withTimeoutOrNull(signOutDeadline()) {
+            catchingFailures(
+                {
+                    val endpoint = discovery.endpoints().endSessionEndpoint
+                    if (endpoint == null) {
+                        ProviderSignOutResult.Unsupported
+                    } else {
+                        ProviderSignOutResult.Redirect(
+                            URLBuilder(endpoint).apply {
+                                parameters.append("id_token_hint", idToken)
+                                parameters.append("post_logout_redirect_uri", config.postLogoutRedirectUri)
+                            }.buildString(),
+                        )
+                    }
+                },
+                { cause -> unavailable(describe(cause)) },
+            )
+        } ?: unavailable("deadline")
+    }
+
+    private fun unavailable(description: String): ProviderSignOutResult {
+        onSignOutUnavailable(description)
+        return ProviderSignOutResult.Unavailable
+    }
+
+    // Class name (and the OperatorHttp failure kind): never the message, which a parser or driver may fill with data.
+    private fun describe(cause: Exception): String =
+        (cause as? OperatorHttpException)?.let { "${it.javaClass.simpleName}/${it.kind}" } ?: cause.javaClass.simpleName
 
     /** The token endpoint exchange (`client_secret_basic` + the PKCE verifier); returns the raw `id_token`. */
     private suspend fun exchangeCode(code: String, attempt: SsoAttempt): String {

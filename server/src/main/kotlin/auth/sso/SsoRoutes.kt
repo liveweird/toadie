@@ -29,9 +29,13 @@ import io.ktor.util.date.GMTDate
 import java.security.MessageDigest
 import java.time.Clock
 import java.time.ZoneId
+import kotlin.time.Duration
 
 /** Test seam for the flow's clock (cookie expiry, JWKS cache age, ID-token `exp`); production never sets it. */
 val SsoClockKey = AttributeKey<Clock>("SsoClock")
+
+/** Test seam for the logout's provider-step deadline; production never sets it ([SIGN_OUT_DEADLINE]). */
+val SsoSignOutDeadlineKey = AttributeKey<Duration>("SsoSignOutDeadline")
 
 private const val COOKIE_MAX_AGE_SECONDS = 10 * 60
 private val NO_STORE_PATHS = setOf(LOGIN_OPTIONS_PATH, SSO_START_PATH, SSO_CALLBACK_PATH, SSO_EXCHANGE_PATH)
@@ -93,6 +97,9 @@ fun Application.configureSso() {
         accounts = SsoAccounts(users),
         // The class name only (the observability.md rule): a database or driver message can quote data.
         onFailureLog = { cause -> log.warn("SSO callback failed unexpectedly ({})", cause.javaClass.name) },
+        signOutDeadline = { attributes.getOrNull(SsoSignOutDeadlineKey) ?: SIGN_OUT_DEADLINE },
+        // The cause description only (class name and failure kind): the end-session URL embeds the ID token.
+        onSignOutUnavailable = { cause -> log.warn("SSO provider sign-out unavailable; signed out locally only ({})", cause) },
     )
     // Logout (auth/AuthRoutes.kt) asks for the provider's end-session URL through this seam only; it reads no SSO type.
     attributes.put(ProviderSignOutKey, ProviderSignOut(flow::endSessionUrl))

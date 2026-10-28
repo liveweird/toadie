@@ -601,7 +601,7 @@ that row's create/update audit before another row or pass two begins. Final ERRO
 later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
 post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
-Current migrations are `V1`–`V49` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V47, a data-only annotation-key seed, follows V43's paragraph; V48, the SSO identity columns, follows V47's; V49, the session's ID token column, follows V48's; V44, an additive column, follows V48's; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V49` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V47, a data-only annotation-key seed, follows V43's paragraph; V48, the SSO identity columns, follows V47's; V49, the session's ID token column, follows V48's; V44, an additive column, follows V49's; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -810,7 +810,8 @@ kept so `POST /logout` can present it as `id_token_hint` to the provider's end-s
 backfill, no index, no CHECK, no data rewrite. It adds no table and no new hard-delete exception: the
 token lives and dies with its `auth_sessions` row (logout `revoke` selects it `FOR UPDATE` and deletes
 the row in the same transaction, so overlapping logouts hand it to exactly one; the login-time
-expiry prune and a user's `auth_version` revocation end it the same way). Refresh (`renew`) is an
+expiry prune also deletes it). A user's `auth_version` bump makes the session unusable but does NOT
+delete the row: the row, and its token, stay until its expiry and the next login-time prune. Refresh (`renew`) is an
 UPDATE of `expires_at` only and keeps it. Only `AuthSessionService.revoke` ever selects the column.
 The checksum is pinned in `MigrationChecksumTest`; `AuthSessionServiceTest` pins the single hand-out.
 
