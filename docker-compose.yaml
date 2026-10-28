@@ -26,7 +26,7 @@ services:
   mailpit:
     # Local mail catcher for the demo: password-reset and MFA email lands here.
     # Read it at http://localhost:8026 (8025 is Lettuce's).
-    image: axllent/mailpit:v1.30@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a
+    image: axllent/mailpit:v1.32@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
     container_name: toadie-mailpit
     restart: unless-stopped
     ports:
