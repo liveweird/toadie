@@ -19,6 +19,12 @@
 #
 # SSO_REDIRECT_URI defaults to the compose app's own origin; a verification stack on other ports
 # (the `-p toadie-check` override) sets it, e.g. SSO_REDIRECT_URI=http://localhost:18081/api/v1/login/sso/callback.
+#
+# Sign-out: Toadie ends the provider session too (RP-initiated logout), landing back on the post-logout
+# redirect URI, which the app derives as <origin of SSO_REDIRECT_URI>/login and the stub must have
+# registered. A stack on other ports therefore ALSO sets SSO_POST_LOGOUT_REDIRECT_URI to that same
+# value, e.g. SSO_POST_LOGOUT_REDIRECT_URI=http://localhost:18081/login; it feeds both services below
+# (the app: blank = derived; the stub: its registered list, default http://localhost:8081/login).
 services:
   stub-idp:
     # Tag AND digest pinned like compose's postgres/mailpit (its own pin, bumped by Dependabot's docker-compose
@@ -37,6 +43,7 @@ services:
       STUB_IDP_PUBLIC_URL: "http://localhost:${STUB_IDP_PORT:-18090}"
       STUB_IDP_CLIENT_ID: toadie-e2e
       STUB_IDP_CLIENT_SECRET: e2e-only-not-a-secret
+      STUB_IDP_POST_LOGOUT_REDIRECT_URIS: "${SSO_POST_LOGOUT_REDIRECT_URI:-http://localhost:8081/login}"
     ports:
       - "127.0.0.1:${STUB_IDP_PORT:-18090}:${STUB_IDP_PORT:-18090}"
     healthcheck:
@@ -56,3 +63,4 @@ services:
       SSO_CLIENT_ID: toadie-e2e
       SSO_CLIENT_SECRET: e2e-only-not-a-secret
       SSO_REDIRECT_URI: "${SSO_REDIRECT_URI:-http://localhost:8081/api/v1/login/sso/callback}"
+      SSO_POST_LOGOUT_REDIRECT_URI: "${SSO_POST_LOGOUT_REDIRECT_URI:-}"

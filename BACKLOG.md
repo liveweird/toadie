@@ -33,12 +33,6 @@ promotes it. A finished item is removed, not ticked.
 
 ## Authentication
 
-- [new] **Sign out of Okta too (RP-initiated logout).** Signing out of Toadie ends only the Toadie
-  session; the Okta session stays, so the next "Sign in with Okta" completes without a prompt. Read
-  `end_session_endpoint` from discovery, keep the ID token as the `id_token_hint` for the session
-  (or fetch a fresh one), redirect through it with a `post_logout_redirect_uri` registered in the
-  Okta application, and decide what a provider without the endpoint does. Update the "Exception"
-  line of `.claude/docs/security.md` "SSO login (OIDC)" and the run-stack runbook with it.
 - [new] **Bound the unauthenticated MFA and SSO-exchange fields.** `MfaVerifyRequest`
   (`challengeId`, `code`) and `SsoExchangeRequest.code` declare no `maxLength` in the OpenAPI
   contract and have no route-side length check, so a ~10 MiB value is encoded and hashed while the

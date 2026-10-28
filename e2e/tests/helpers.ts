@@ -77,10 +77,25 @@ export function accountMenu(page: Page) {
   return page.getByRole("button", { name: /Account menu$/ });
 }
 
-/** Sign out through the account menu (the former header Logout button). */
+/**
+ * Sign out through the account menu (the former header Logout button) and wait for the sign-in
+ * page. An SSO session leaves for the identity provider's end-session URL first and only then
+ * returns to /login, so the URL is the readiness signal for both kinds of session.
+ */
 export async function signOut(page: Page): Promise<void> {
   await accountMenu(page).click();
+  const logout = page.waitForResponse(
+    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/v1/logout",
+  );
+  // The SPA routes to /login on its own before it leaves for the provider, so for an SSO session
+  // that URL is not the end of the round trip: wait for the document the provider redirects back
+  // to (a `load` event — an in-app route change fires none), or a later step races the navigation.
+  const reloaded = page.waitForEvent("load");
+  // A password session never reloads; keep the unused waiter's rejection on page close handled.
+  reloaded.catch(() => undefined);
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  if ((await logout).status() === 200) await reloaded;
+  await page.waitForURL(/\/login$/);
 }
 
 /**

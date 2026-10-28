@@ -285,6 +285,9 @@ sso:
   clientSecret: "$SSO_CLIENT_SECRET:"
   # Blank = derived from MAIL_APP_URL + /api/v1/login/sso/callback. Must equal a redirect URI registered at the IdP.
   redirectUri: "$SSO_REDIRECT_URI:"
+  # Where the provider returns the browser after "sign out of Okta too" (RP-initiated logout). Blank = the redirect URI's origin + /login.
+  # Must be registered at the IdP as a sign-out redirect URI. Only used when the provider's discovery advertises an end_session_endpoint.
+  postLogoutRedirectUri: "$SSO_POST_LOGOUT_REDIRECT_URI:"
   scopes: "$SSO_SCOPES:openid email profile"
   # Comma-separated email domains admitted for linking AND account creation; blank = any verified email.
   allowedEmailDomains: "$SSO_ALLOWED_EMAIL_DOMAINS:"

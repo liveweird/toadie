@@ -55,7 +55,10 @@ those two mail-dependent journeys. The workflow also starts the stack with the S
 `127.0.0.1:18090` with SSO switched on for the app) and waits for the stub; `sso.spec.ts` fails in CI
 without it and skips locally on a stack without SSO. The overlay is e2e/CI only (see its header for
 the path and port rules); to run the journeys locally, bring a disposable project up with it as
-shown in `.claude/skills/run-stack/SKILL.md` "Enable Okta SSO".
+shown in `.claude/skills/run-stack/SKILL.md` "Enable Okta SSO". The stub remembers a signed-in
+identity (session cookie) and Toadie's sign-out ends it through its `/logout`, which accepts only
+the registered post-logout redirect URI: a stack on other ports sets `SSO_POST_LOGOUT_REDIRECT_URI`
+(e.g. `http://localhost:18081/login`) beside `SSO_REDIRECT_URI`.
 
 For a separate local verification stack, set both `E2E_BASE_URL` (the SPA/API origin) and
 `E2E_MAILPIT_URL` (the matching catcher, default `http://localhost:8026`). Its `MAIL_APP_URL`
@@ -651,8 +654,9 @@ the same commit** — this list is the coverage map, the scenario file is the de
   (`e2e/stub-idp`, the `e2e/compose.sso.yaml` overlay): a new email signs in from a deep link and
   gets a passwordless account the admin sees badged SSO; the same email as a password account is
   linked and keeps its password; an administrator unlinks an SSO account from its Users row
-  and its next SSO sign-in links it again; cancelling at the provider shows the alert; an
-  administrator account is refused. Skips when `/api/v1/login/options` has no SSO locally; fails in CI.
+  and its next SSO sign-in links it again; signing out of Toadie also ends the stub's session
+  (silent re-sign-in first, then the form again after the sign-out); cancelling at the provider
+  shows the alert; an administrator account is refused. Skips when `/api/v1/login/options` has no SSO locally; fails in CI.
 - [`types.spec.ts`](scenarios/types.md) — the per-kind type dictionaries: seeded rows → modal
   validation → append a unique type to the Domain dictionary → the regular user's read-only
   view → the editor's Type Select on a new Domain file → restore; the type registry's only

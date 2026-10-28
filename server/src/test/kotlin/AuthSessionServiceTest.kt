@@ -7,6 +7,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -126,6 +127,49 @@ class AuthSessionServiceTest {
             }
             assertFalse(sessions.isActive(id, userId))
             assertFalse(sessions.renew(id, userId, 0, now + 120_000))
+        }
+    }
+
+    @Test
+    fun `revoke hands out the retained ID token exactly once and only to the owner, renewal keeps it`() = testApplication {
+        usePostgresTestcontainer()
+        val now = System.currentTimeMillis()
+        val sessions = newAuthSessionService { now }
+        val otherInstance = newAuthSessionService { now }
+        val userId = TestUsers.seed(uniqueEmail("session-idtoken"), "pw")
+        val otherId = TestUsers.seed(uniqueEmail("session-idtoken-other"), "pw")
+        val withToken = UUID.randomUUID().toString()
+        val without = UUID.randomUUID().toString()
+        assertTrue(sessions.create(withToken, userId, 0, now + 60_000, idToken = "header.payload.signature"))
+        assertTrue(sessions.create(without, userId, 0, now + 60_000))
+
+        // Refresh keeps the row, so it keeps the token; another user's revoke neither returns it nor deletes the row.
+        assertTrue(sessions.renew(withToken, userId, 0, now + 120_000))
+        assertNull(sessions.revoke(withToken, otherId))
+        assertTrue(sessions.isActive(withToken, userId))
+
+        assertNull(sessions.revoke(without, userId), "a password session holds no token")
+        assertFalse(sessions.isActive(without, userId))
+
+        assertEquals("header.payload.signature", sessions.revoke(withToken, userId))
+        assertFalse(sessions.isActive(withToken, userId))
+        assertNull(otherInstance.revoke(withToken, userId), "a repeat finds no row, hence no token")
+    }
+
+    @Test
+    fun `overlapping logouts of one family return the token to exactly one of them`() = testApplication {
+        usePostgresTestcontainer()
+        val now = System.currentTimeMillis()
+        val sessions = newAuthSessionService { now }
+        val otherInstance = newAuthSessionService { now }
+        val userId = TestUsers.seed(uniqueEmail("session-idtoken-race"), "pw")
+        repeat(5) {
+            val id = UUID.randomUUID().toString()
+            assertTrue(sessions.create(id, userId, 0, now + 60_000, idToken = "tok-$id"))
+            val results = coroutineScope {
+                listOf(async { sessions.revoke(id, userId) }, async { otherInstance.revoke(id, userId) }).awaitAll()
+            }
+            assertEquals(listOf("tok-$id"), results.filterNotNull())
         }
     }
 }

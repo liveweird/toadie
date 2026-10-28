@@ -11,6 +11,8 @@ internal const val SSO_CALLBACK_PATH = "$SSO_PATH_PREFIX/callback"
 internal const val SSO_EXCHANGE_PATH = "$SSO_PATH_PREFIX/exchange"
 internal const val LOGIN_OPTIONS_PATH = "/api/v1/login/options"
 
+/** The SPA's sign-in page: where the provider returns the browser after its session ended. */
+private const val POST_LOGOUT_PATH = "/login"
 private const val DEFAULT_LABEL = "Okta"
 private const val DEFAULT_SCOPES = "openid email profile"
 private const val MAX_LABEL_LENGTH = 50
@@ -38,6 +40,11 @@ class SsoConfig internal constructor(
     val clientId: String,
     val clientSecret: String,
     val redirectUri: String,
+    /**
+     * Where the provider sends the browser after ending its session (`post_logout_redirect_uri`): the origin of [redirectUri] plus
+     * `/login`, or the validated `sso.postLogoutRedirectUri`. Must be registered at the provider as a sign-out redirect URI.
+     */
+    val postLogoutRedirectUri: String,
     val scopes: String,
     val allowedEmailDomains: Set<String>,
     /** Development mode only: lets the issuer, the redirect URI and the discovered endpoints be plain http. */
@@ -86,6 +93,9 @@ class SsoConfig internal constructor(
             if (issuer.length > MAX_ISSUER_LENGTH) throw SsoConfigException("sso.issuer must be at most $MAX_ISSUER_LENGTH characters")
 
             val redirectUri = redirectUriOf(read("redirectUri").trim(), mailAppUrl, development)
+            val postLogoutRedirectUri = read("postLogoutRedirectUri").trim().ifEmpty { null }
+                ?.also { requireUrl("sso.postLogoutRedirectUri", it, development) }
+                ?: (originOf(redirectUri) + POST_LOGOUT_PATH)
             val scopes = read("scopes").trim().ifEmpty { DEFAULT_SCOPES }.split(Regex("\\s+"))
             if ("openid" !in scopes || scopes.any { !SCOPE_TOKEN.matches(it) }) {
                 throw SsoConfigException("sso.scopes must be space-separated scope tokens including openid")
@@ -96,6 +106,7 @@ class SsoConfig internal constructor(
                 clientId = clientId,
                 clientSecret = clientSecret,
                 redirectUri = redirectUri,
+                postLogoutRedirectUri = postLogoutRedirectUri,
                 scopes = scopes.joinToString(" "),
                 allowedEmailDomains = allowedDomainsOf(read("allowedEmailDomains")),
                 allowHttp = development,
@@ -119,6 +130,9 @@ class SsoConfig internal constructor(
                 )
             return origin + SSO_CALLBACK_PATH
         }
+
+        /** `scheme://authority` of an already validated URL (it has a host and no userinfo). */
+        private fun originOf(url: String): String = URI(url).let { "${it.scheme}://${it.rawAuthority}" }
 
         private fun allowedDomainsOf(raw: String): Set<String> =
             raw.split(',').map { it.trim().removePrefix("@").lowercase() }.filter { it.isNotEmpty() }

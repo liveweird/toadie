@@ -2,8 +2,17 @@
 // a real IdP: it trusts whatever email is typed on its sign-in page. Node built-ins only, no npm
 // dependencies, so the plain node:alpine image can run it straight from a read-only mount.
 //
-// Endpoints: discovery, /authorize (a tiny form), /authorize/complete (Continue / Cancel),
-// /token (client_secret_basic + PKCE S256), /jwks (RS256), /healthz.
+// Endpoints: discovery, /authorize (a tiny form, or a silent completion while the browser holds the
+// stub's session cookie), /authorize/complete (Continue / Cancel), /token (client_secret_basic +
+// PKCE S256), /jwks (RS256), /logout (RP-initiated logout, id_token_hint REQUIRED), /healthz.
+//
+// Like a real provider it REMEMBERS the signed-in identity: Continue sets an HttpOnly, SameSite=Lax
+// session cookie, a later /authorize with it completes without showing the form, and /logout is
+// the only thing (besides expiry) that ends it. /logout verifies the id_token_hint's signature, iss and
+// aud ONLY and deliberately ignores exp/iat: Toadie sessions slide for hours, so the stored ID token is
+// usually long expired at sign-out, and OIDC RP-Initiated Logout says the OP SHOULD accept an expired
+// hint (the stub's tokens live 5 minutes, so an expired hint is the normal case, not an edge). A journey that signs in through the stub must
+// therefore sign out of Toadie (which ends the stub session) or use a fresh browser context.
 //
 // Env:
 //   STUB_IDP_PORT           listen port                                   (default 18090)
@@ -12,10 +21,13 @@
 //                                                                         (default http://stub-idp:18090)
 //   STUB_IDP_PUBLIC_URL     the browser-facing origin of /authorize       (default http://localhost:18090)
 //   STUB_IDP_CLIENT_ID / STUB_IDP_CLIENT_SECRET   the one registered confidential client
+//   STUB_IDP_POST_LOGOUT_REDIRECT_URIS   comma list of the post_logout_redirect_uri values /logout
+//                           accepts (the "Sign-out redirect URIs" of a real client)
+//                                                                         (default http://localhost:8081/login)
 //
 // Logging: one line per request, method and path only — never a code, token or query string.
 import { createServer } from "node:http";
-import { createHash, generateKeyPairSync, randomBytes, sign, timingSafeEqual } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, sign, timingSafeEqual, verify } from "node:crypto";
 import { URL, URLSearchParams } from "node:url";
 
 const PORT = Number(process.env.STUB_IDP_PORT ?? 18090);
@@ -23,6 +35,12 @@ const ISSUER = (process.env.STUB_IDP_ISSUER ?? "http://stub-idp:18090").replace(
 const PUBLIC_URL = (process.env.STUB_IDP_PUBLIC_URL ?? "http://localhost:18090").replace(/\/+$/, "");
 const CLIENT_ID = process.env.STUB_IDP_CLIENT_ID ?? "toadie-e2e";
 const CLIENT_SECRET = process.env.STUB_IDP_CLIENT_SECRET ?? "e2e-only-not-a-secret";
+const POST_LOGOUT_REDIRECT_URIS = (process.env.STUB_IDP_POST_LOGOUT_REDIRECT_URIS ?? "http://localhost:8081/login")
+  .split(",")
+  .map((uri) => uri.trim())
+  .filter(Boolean);
+const SESSION_COOKIE = "stub_idp_session";
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const CODE_TTL_MS = 5 * 60 * 1000;
 const TOKEN_TTL_SECONDS = 300;
 
@@ -32,6 +50,9 @@ const JWK = { kty: "RSA", use: "sig", alg: "RS256", kid: KID, ...publicKey.expor
 
 /** code -> { email, name, nonce, codeChallenge, redirectUri, clientId, expires } */
 const codes = new Map();
+
+/** session cookie value -> { email, name, expires }: the identity the browser signed in as */
+const sessions = new Map();
 
 const b64url = (input) => Buffer.from(input).toString("base64url");
 
@@ -59,8 +80,8 @@ function html(res, status, body) {
   res.end(body);
 }
 
-function redirect(res, location) {
-  res.writeHead(302, { Location: location, "Cache-Control": "no-store" });
+function redirect(res, location, extra = {}) {
+  res.writeHead(302, { Location: location, "Cache-Control": "no-store", ...extra });
   res.end();
 }
 
@@ -129,6 +150,7 @@ function handleDiscovery(res) {
     authorization_endpoint: `${PUBLIC_URL}/authorize`,
     token_endpoint: `${ISSUER}/token`,
     jwks_uri: `${ISSUER}/jwks`,
+    end_session_endpoint: `${PUBLIC_URL}/logout`,
     response_types_supported: ["code"],
     subject_types_supported: ["public"],
     id_token_signing_alg_values_supported: ["RS256"],
@@ -137,28 +159,29 @@ function handleDiscovery(res) {
   });
 }
 
-function handleAuthorize(res, url) {
-  const problem = authorizeProblem(url.searchParams);
-  if (problem) return html(res, 400, `<!doctype html><title>Bad request</title><p>${escapeHtml(problem)}</p>`);
-  return html(res, 200, authorizePage(url.searchParams));
+function sessionIdOf(req) {
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const eq = part.indexOf("=");
+    if (eq > 0 && part.slice(0, eq).trim() === SESSION_COOKIE) return part.slice(eq + 1).trim();
+  }
+  return null;
 }
 
-function handleComplete(res, url) {
-  const params = url.searchParams;
-  const problem = authorizeProblem(params);
-  if (problem) return html(res, 400, `<!doctype html><title>Bad request</title><p>${escapeHtml(problem)}</p>`);
+function rememberedIdentity(req) {
+  const id = sessionIdOf(req);
+  const entry = id ? sessions.get(id) : undefined;
+  return entry && entry.expires > Date.now() ? entry : null;
+}
+
+/** Mints an authorization code for the identity and returns the redirect back to the client. */
+function issueCode(params, email, name) {
   const target = new URL(params.get("redirect_uri"));
   const state = params.get("state");
   if (state) target.searchParams.set("state", state);
-  if (params.get("action") !== "continue") {
-    target.searchParams.set("error", "access_denied");
-    return redirect(res, target.toString());
-  }
   const code = randomBytes(24).toString("base64url");
-  const email = (params.get("email") ?? "").trim();
   codes.set(code, {
     email,
-    name: (params.get("name") ?? "").trim(),
+    name,
     nonce: params.get("nonce") ?? "",
     codeChallenge: params.get("code_challenge"),
     redirectUri: params.get("redirect_uri"),
@@ -166,7 +189,73 @@ function handleComplete(res, url) {
     expires: Date.now() + CODE_TTL_MS,
   });
   target.searchParams.set("code", code);
-  return redirect(res, target.toString());
+  return target.toString();
+}
+
+function handleAuthorize(req, res, url) {
+  const problem = authorizeProblem(url.searchParams);
+  if (problem) return html(res, 400, `<!doctype html><title>Bad request</title><p>${escapeHtml(problem)}</p>`);
+  // A remembered identity completes silently, exactly like a provider session that is still alive.
+  const remembered = rememberedIdentity(req);
+  if (remembered) return redirect(res, issueCode(url.searchParams, remembered.email, remembered.name));
+  return html(res, 200, authorizePage(url.searchParams));
+}
+
+function handleComplete(res, url) {
+  const params = url.searchParams;
+  const problem = authorizeProblem(params);
+  if (problem) return html(res, 400, `<!doctype html><title>Bad request</title><p>${escapeHtml(problem)}</p>`);
+  if (params.get("action") !== "continue") {
+    const target = new URL(params.get("redirect_uri"));
+    const state = params.get("state");
+    if (state) target.searchParams.set("state", state);
+    target.searchParams.set("error", "access_denied");
+    return redirect(res, target.toString());
+  }
+  const email = (params.get("email") ?? "").trim();
+  const name = (params.get("name") ?? "").trim();
+  const sessionId = randomBytes(24).toString("base64url");
+  sessions.set(sessionId, { email, name, expires: Date.now() + SESSION_TTL_MS });
+  return redirect(res, issueCode(params, email, name), {
+    "Set-Cookie": `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_MS / 1000}`,
+  });
+}
+
+/** The ID token's claims when it is one this stub signed for this client, else null. Expiry is NOT checked: an expired hint is legitimate at logout. */
+function verifiedHintClaims(token) {
+  const parts = String(token ?? "").split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+    if (header.alg !== "RS256") return null;
+    const signature = Buffer.from(parts[2], "base64url");
+    if (!verify("RSA-SHA256", Buffer.from(`${parts[0]}.${parts[1]}`), publicKey, signature)) return null;
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+    return claims.iss === ISSUER && audiences.includes(CLIENT_ID) ? claims : null;
+  } catch {
+    return null;
+  }
+}
+
+/** RP-initiated logout (OIDC): ends the remembered session, then returns to a REGISTERED post_logout_redirect_uri. */
+function handleLogout(req, res, url) {
+  const params = url.searchParams;
+  if (!verifiedHintClaims(params.get("id_token_hint"))) {
+    return html(res, 400, "<!doctype html><title>Bad request</title><p>A valid id_token_hint is required</p>");
+  }
+  const target = params.get("post_logout_redirect_uri") ?? "";
+  if (!POST_LOGOUT_REDIRECT_URIS.includes(target)) {
+    return html(res, 400, "<!doctype html><title>Bad request</title><p>post_logout_redirect_uri is not registered</p>");
+  }
+  const sessionId = sessionIdOf(req);
+  if (sessionId) sessions.delete(sessionId);
+  const location = new URL(target);
+  const state = params.get("state");
+  if (state) location.searchParams.set("state", state);
+  return redirect(res, location.toString(), {
+    "Set-Cookie": `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+  });
 }
 
 /** client_secret_basic: base64("urlencode(id):urlencode(secret)"), RFC 6749 section 2.3.1. */
@@ -231,8 +320,9 @@ const server = createServer(async (req, res) => {
   console.log(`${req.method} ${url.pathname}`);
   try {
     if (req.method === "GET" && url.pathname === "/.well-known/openid-configuration") return handleDiscovery(res);
-    if (req.method === "GET" && url.pathname === "/authorize") return handleAuthorize(res, url);
+    if (req.method === "GET" && url.pathname === "/authorize") return handleAuthorize(req, res, url);
     if (req.method === "GET" && url.pathname === "/authorize/complete") return handleComplete(res, url);
+    if (req.method === "GET" && url.pathname === "/logout") return handleLogout(req, res, url);
     if (req.method === "POST" && url.pathname === "/token") return await handleToken(req, res);
     if (req.method === "GET" && url.pathname === "/jwks") return json(res, 200, { keys: [JWK] });
     if (req.method === "GET" && url.pathname === "/healthz") return json(res, 200, { status: "ok" });
@@ -246,6 +336,7 @@ const server = createServer(async (req, res) => {
 setInterval(() => {
   const now = Date.now();
   for (const [code, entry] of codes) if (entry.expires <= now) codes.delete(code);
+  for (const [id, entry] of sessions) if (entry.expires <= now) sessions.delete(id);
 }, 60_000).unref();
 
 server.listen(PORT, "0.0.0.0", () => {

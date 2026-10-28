@@ -17,9 +17,13 @@ import type { APIRequestContext, Page } from "@playwright/test";
 // e2e/compose.sso.yaml). The stack must have SSO on; GET /api/v1/login/options says whether it
 // does. Locally the journeys skip themselves on a stack without it; under CI they FAIL instead
 // (the Mailpit pattern in mfa.spec.ts), so a workflow that loses the overlay cannot go green.
-// The login-page strings below are the EN `auth.ssoSignIn` / `auth.ssoError.*` values.
+// The login-page strings below are the EN `auth.ssoSignIn` / `auth.ssoError.*` / `auth.signedOut` values.
+// The stub REMEMBERS the identity it signed in (a session cookie, like a real provider) and only
+// Toadie's sign-out ends it, so every journey that signs in through the stub either signs out of
+// Toadie afterwards or ends with the throwaway browser context.
 const SIGN_IN_WITH_OKTA = "Sign in with Okta";
 const CANCELLED_ALERT = "Sign-in was cancelled. Try again, or use your password.";
+const SIGNED_OUT_BANNER = "You've been signed out.";
 const NOT_ALLOWED_ALERT =
   "This account cannot sign in through single sign-on. Use your password, or contact your administrator.";
 
@@ -160,6 +164,39 @@ test("an administrator unlinks an SSO account, which links again on its next SSO
   await login(page);
   row = await usersRow(page, sso.name);
   await expect(row.getByText("SSO", { exact: true })).toBeVisible();
+  await deleteUserRow(page, sso.name);
+});
+
+test("signing out of Toadie also ends the identity provider's session", async ({ page, request }) => {
+  await requireSso(request);
+  const sso = ssoIdentity("E2E-SsoSignOut");
+
+  await page.goto("/login");
+  await openStubSignIn(page);
+  await continueAsStubUser(page, sso);
+  await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
+
+  // The stub now remembers the identity. Drop only Toadie's local session (no sign-out, so the
+  // provider's stays alive): the next SSO sign-in completes silently, with no form to fill in.
+  await page.evaluate(() => localStorage.clear());
+  await page.goto("/login");
+  await page.getByRole("button", { name: SIGN_IN_WITH_OKTA }).click();
+  await expect(accountMenu(page)).toBeVisible({ timeout: 15_000 });
+
+  // Signing out of Toadie goes through the provider's end-session endpoint and comes back to the
+  // sign-in page, still announcing the sign-out.
+  await signOut(page);
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText(SIGNED_OUT_BANNER)).toBeVisible();
+  await expect(accountMenu(page)).toHaveCount(0);
+
+  // The provider's session is gone: the stub asks for the identity again.
+  await openStubSignIn(page);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByText(CANCELLED_ALERT)).toBeVisible();
+
+  await login(page);
+  await usersRow(page, sso.name);
   await deleteUserRow(page, sso.name);
 });
 

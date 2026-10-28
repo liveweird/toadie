@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { act } from "@testing-library/react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import {
   bindQueryCacheToAuthBoundary,
   consumeSignedOut,
   flagSignedOut,
+  persistSignedOutFlag,
   notifyAuthChange,
 } from "./auth";
 
@@ -31,6 +32,8 @@ function TestRoutes() {
 }
 
 describe("route guards", () => {
+  afterEach(() => sessionStorage.clear());
+
   test("RequireAuth redirects an anonymous visitor to /login", () => {
     renderWithProviders(<TestRoutes />, { route: "/secret" });
     expect(screen.getByText("login page")).toBeInTheDocument();
@@ -71,6 +74,38 @@ describe("route guards", () => {
     flagSignedOut();
     expect(consumeSignedOut()).toBe(true);
     expect(consumeSignedOut()).toBe(false);
+  });
+
+  test("a flag persisted by an earlier page is read and removed once", () => {
+    // The page that left for the provider wrote its own mark; this document's differs.
+    sessionStorage.setItem("toadie.signedOut", "an-earlier-page");
+    expect(consumeSignedOut()).toBe(true);
+    expect(sessionStorage.getItem("toadie.signedOut")).toBeNull();
+    expect(consumeSignedOut()).toBe(false);
+  });
+
+  test("the leaving page never eats the flag it persisted for the returning one", () => {
+    flagSignedOut();
+    persistSignedOutFlag();
+    // The SPA's own redirect to /login may render Login more than once before the page unloads.
+    expect(consumeSignedOut()).toBe(true);
+    expect(consumeSignedOut()).toBe(false);
+    expect(consumeSignedOut()).toBe(false);
+    expect(sessionStorage.getItem("toadie.signedOut")).not.toBeNull();
+    sessionStorage.removeItem("toadie.signedOut");
+  });
+
+  test("blocked storage reads as no flag and never throws", () => {
+    const blocked = () => {
+      throw new Error("blocked");
+    };
+    vi.stubGlobal("sessionStorage", { getItem: blocked, setItem: blocked, removeItem: blocked });
+    try {
+      expect(() => persistSignedOutFlag()).not.toThrow();
+      expect(consumeSignedOut()).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -10,6 +10,12 @@ import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 
 val AuthSessionServiceKey = AttributeKey<AuthSessionService>("AuthSessionService")
 
+/**
+ * Longest ID token kept on a session row. A real provider token is a few KiB at most; anything larger is not stored and its
+ * session signs out locally only (`.claude/docs/security.md` "SSO login (OIDC)", Sign-out).
+ */
+internal const val MAX_RETAINED_ID_TOKEN_CHARS = 8192
+
 /** Reject missing/out-of-range identity instead of wrapping a signed BIGINT into UInt. */
 internal fun Payload.sessionUserId(): UInt? = getClaim("userId").asLong()
     ?.takeIf { it in 0..UInt.MAX_VALUE.toLong() }?.toUInt()
@@ -29,10 +35,17 @@ class AuthSessionService(
         val userId = reference("user_id", Users)
         val authVersion = long("auth_version")
         val expiresAt = long("expires_at")
+
+        /** V49: the raw SSO ID token (provider sign-out's `id_token_hint`); null for a password session. Only [revoke] reads it. */
+        val idToken = text("id_token").nullable()
         override val primaryKey = PrimaryKey(id)
     }
 
-    suspend fun create(id: String, userId: UInt, authVersion: Long, expiresAt: Long): Boolean {
+    /**
+     * [idToken] is the SSO session's raw ID token, kept for the provider sign-out ([revoke]); callers pass null for a password
+     * session and for a token over [MAX_RETAINED_ID_TOKEN_CHARS] (logout is then local only).
+     */
+    suspend fun create(id: String, userId: UInt, authVersion: Long, expiresAt: Long, idToken: String? = null): Boolean {
         // Separate transaction: cleanup never holds another session's lock while waiting
         // for this user's lock (issuance and renewal always lock user before session).
         suspendTransaction(database) { Sessions.deleteWhere { Sessions.expiresAt lessEq clock() } }
@@ -43,6 +56,7 @@ class AuthSessionService(
                 it[Sessions.userId] = userId
                 it[Sessions.authVersion] = authVersion
                 it[Sessions.expiresAt] = expiresAt
+                it[Sessions.idToken] = idToken
             }
             true
         }
@@ -70,10 +84,16 @@ class AuthSessionService(
         }.count() == 1L
     }
 
-    suspend fun revoke(id: String, userId: UInt) {
-        suspendTransaction(database) {
-            Sessions.deleteWhere { (Sessions.id eq id) and (Sessions.userId eq userId) }
-        }
+    /**
+     * Deletes the caller's own session row and returns the ID token it held (null when it held none or was already gone). One
+     * transaction, select then delete: the token is read from the very row this call removes, so it is handed out at most once
+     * even across overlapping logouts of the same family (the second finds no row). Another user's row is never touched.
+     */
+    suspend fun revoke(id: String, userId: UInt): String? = suspendTransaction(database) {
+        val held = Sessions.select(Sessions.idToken).where { (Sessions.id eq id) and (Sessions.userId eq userId) }
+            .forUpdate().toList().singleOrNull()?.get(Sessions.idToken)
+        Sessions.deleteWhere { (Sessions.id eq id) and (Sessions.userId eq userId) }
+        held
     }
 
     // Defense in depth (V41): a service account can never authenticate, so it must never

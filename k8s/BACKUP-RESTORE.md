@@ -44,7 +44,7 @@ not a verified PostgreSQL backup unless the provider guarantees a database-consi
 
 The following command reads credentials inside the PostgreSQL pod and writes only the dump to
 the operator's machine. Pick a private destination on encrypted storage; the archive contains
-application data and password hashes. The operator's machine needs `kubectl` and PostgreSQL 18
+application data and password hashes, and the raw provider ID tokens of live SSO sessions (`auth_sessions.id_token`, V49; bearer-shaped, valid at other consumers of the same Okta client for at most an hour). For a copy that is not for disaster recovery, add `--exclude-table-data=auth_sessions` to the `pg_dump` arguments: a restore then just means everyone signs in again. The operator's machine needs `kubectl` and PostgreSQL 18
 client tools (`pg_restore`) on `PATH`.
 
 ```sh

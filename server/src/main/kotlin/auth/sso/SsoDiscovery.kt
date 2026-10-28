@@ -25,8 +25,17 @@ val SsoHttpKey = AttributeKey<OperatorHttp>("SsoHttp")
  */
 class SsoUpstreamException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
-/** The three endpoints the flow uses, already validated against the configured scheme rule. */
-class SsoEndpoints(val authorizationEndpoint: String, val tokenEndpoint: String, val jwksUri: String)
+/**
+ * The endpoints the flow uses, already validated against the configured scheme rule. [endSessionEndpoint] is the one OPTIONAL
+ * member (OIDC RP-initiated logout): absent, or present but failing the scheme rule, it is null and provider sign-out is
+ * simply unavailable — it never fails a login.
+ */
+class SsoEndpoints(
+    val authorizationEndpoint: String,
+    val tokenEndpoint: String,
+    val jwksUri: String,
+    val endSessionEndpoint: String? = null,
+)
 
 private const val DISCOVERY_SUFFIX = ".well-known/openid-configuration"
 private const val DISCOVERY_TTL_MILLIS = 60 * 60 * 1000L
@@ -41,11 +50,16 @@ private const val DISCOVERY_TTL_MILLIS = 60 * 60 * 1000L
 class SsoDiscovery(
     private val config: SsoConfig,
     private val http: () -> OperatorHttp,
+    /** One line per discovery fetch whose optional `end_session_endpoint` was unusable; the message names the field only. */
+    private val onWarn: (String) -> Unit = {},
     clock: () -> Long = System::currentTimeMillis,
 ) {
     private val cache = StaleServingCache(DISCOVERY_TTL_MILLIS, clock = clock) { fetch() }
 
     suspend fun endpoints(): SsoEndpoints = cache.get()
+
+    /** The last good document while it is still servable (TTL plus the staleness bound), without any network call. */
+    fun cachedEndpoints(): SsoEndpoints? = cache.peekUsable()
 
     private suspend fun fetch(): SsoEndpoints {
         val url = config.issuer.let { if (it.endsWith("/")) it else "$it/" } + DISCOVERY_SUFFIX
@@ -57,11 +71,27 @@ class SsoDiscovery(
             authorizationEndpoint = endpoint(document, "authorization_endpoint"),
             tokenEndpoint = endpoint(document, "token_endpoint"),
             jwksUri = endpoint(document, "jwks_uri"),
+            endSessionEndpoint = optionalEndpoint(document, "end_session_endpoint"),
         )
     }
 
     private fun endpoint(document: JsonObject, name: String): String {
         val value = document.string(name) ?: throw SsoUpstreamException("Discovery has no $name")
+        return checkedEndpoint(name, value)
+    }
+
+    /** Absent -> null; present but unusable -> null plus one warning (never the value). */
+    private fun optionalEndpoint(document: JsonObject, name: String): String? {
+        val value = document.string(name) ?: return null
+        return try {
+            checkedEndpoint(name, value)
+        } catch (_: SsoUpstreamException) {
+            onWarn("Discovery $name is not an acceptable URL; sign-out through the provider is unavailable")
+            null
+        }
+    }
+
+    private fun checkedEndpoint(name: String, value: String): String {
         val uri = try {
             URI(value)
         } catch (_: URISyntaxException) {

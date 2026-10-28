@@ -2,6 +2,8 @@ package ch.nokillswit.auth.sso
 
 import ch.nokillswit.audit.audit
 import ch.nokillswit.auth.AuthSessionServiceKey
+import ch.nokillswit.auth.ProviderSignOut
+import ch.nokillswit.auth.ProviderSignOutKey
 import ch.nokillswit.auth.SSO_RATE_LIMIT
 import ch.nokillswit.auth.authResponse
 import ch.nokillswit.authz.UnauthorizedException
@@ -27,9 +29,13 @@ import io.ktor.util.date.GMTDate
 import java.security.MessageDigest
 import java.time.Clock
 import java.time.ZoneId
+import kotlin.time.Duration
 
 /** Test seam for the flow's clock (cookie expiry, JWKS cache age, ID-token `exp`); production never sets it. */
 val SsoClockKey = AttributeKey<Clock>("SsoClock")
+
+/** Test seam for the logout's provider-step deadline; production never sets it ([SIGN_OUT_DEADLINE]). */
+val SsoSignOutDeadlineKey = AttributeKey<Duration>("SsoSignOutDeadline")
 
 private const val COOKIE_MAX_AGE_SECONDS = 10 * 60
 private val NO_STORE_PATHS = setOf(LOGIN_OPTIONS_PATH, SSO_START_PATH, SSO_CALLBACK_PATH, SSO_EXCHANGE_PATH)
@@ -78,7 +84,7 @@ fun Application.configureSso() {
     val users = attributes[UserServiceKey]
     val sessions = attributes[AuthSessionServiceKey]
     val jwtConfig = attributes[JwtConfigKey]
-    val discovery = SsoDiscovery(config, httpProvider) { clock.millis() }
+    val discovery = SsoDiscovery(config, httpProvider, onWarn = { log.warn(it) }) { clock.millis() }
     val handoffs = SsoHandoffs(clock = { clock.millis() })
     val flow = SsoFlow(
         config = config,
@@ -91,7 +97,18 @@ fun Application.configureSso() {
         accounts = SsoAccounts(users),
         // The class name only (the observability.md rule): a database or driver message can quote data.
         onFailureLog = { cause -> log.warn("SSO callback failed unexpectedly ({})", cause.javaClass.name) },
+        signOutDeadline = { attributes.getOrNull(SsoSignOutDeadlineKey) ?: SIGN_OUT_DEADLINE },
+        // The cause description only (class name and failure kind): the end-session URL embeds the ID token.
+        onSignOutProblem = { cause, servedFromCache ->
+            if (servedFromCache) {
+                log.warn("SSO provider discovery missed the sign-out deadline; used the cached end-session endpoint ({})", cause)
+            } else {
+                log.warn("SSO provider sign-out unavailable; signed out locally only ({})", cause)
+            }
+        },
     )
+    // Logout (auth/AuthRoutes.kt) asks for the provider's end-session URL through this seam only; it reads no SSO type.
+    attributes.put(ProviderSignOutKey, ProviderSignOut(flow::endSessionUrl))
     val secureCookie = !developmentMode
     // Production: `__Host-` + Secure + Path=/ + no Domain, so a sibling subdomain cannot toss its own cookie over ours.
     // Development serves plain http, which cannot carry a `__Host-` cookie. Set and clear share these attributes exactly.
@@ -161,7 +178,7 @@ fun Application.configureSso() {
                 // The /login/mfa verify shape: still there, still active, and no credential/identity change since the callback.
                 val user = users.read(handoff.userId)
                 if (user == null || user.authVersion != handoff.authVersion) reject()
-                val response = jwtConfig.authResponse(handoff.userId, user, sessions)
+                val response = jwtConfig.authResponse(handoff.userId, user, sessions, idToken = handoff.idToken)
                 audit("login.sso_success", "userId" to handoff.userId.toLong(), "outcome" to handoff.outcome.wire)
                 call.respond(HttpStatusCode.OK, response)
             }

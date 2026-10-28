@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.34.0",
+    date: "2026-10-28",
+    en: `**Signing out ends the Okta session too.** After an Okta sign-in, Sign out also signs you out of Okta, so the next "Sign in with Okta" asks who you are instead of letting you straight back in. Password sign-ins are unchanged. Operators register the app's sign-in page as a sign-out redirect URI in Okta.`,
+    pl: `**Wylogowanie kończy też sesję Okta.** Po zalogowaniu przez Okta przycisk Wyloguj wylogowuje także z Okta, więc następne „Zaloguj przez Okta” pyta, kim jesteś, zamiast od razu wpuszczać. Logowanie hasłem działa bez zmian. Administratorzy/administratorki rejestrują w Okta stronę logowania aplikacji jako adres przekierowania po wylogowaniu.`,
+  },
+  {
     version: "2.33.0",
     date: "2026-10-28",
     en: `**Unlink an Okta identity.** Administrators can unlink a user's Okta sign-in from the Users list: the user is signed out everywhere, and their next Okta sign-in links the account again by email. This moves an account to a new Okta identity, and also re-admits an Okta identity whose account was deleted. An administrator or MFA-enabled account without a password needs one set first.`,

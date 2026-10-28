@@ -107,6 +107,10 @@ class StubIdp(
     @Volatile
     var tokenOverride: Pair<Int, String>? = null
 
+    /** Runs on the stub's thread at the start of every discovery request (before it answers): lets a test observe the app's state then. */
+    @Volatile
+    var onDiscovery: (() -> Unit)? = null
+
     val tokenRequests = CopyOnWriteArrayList<TokenRequest>()
     val jwksFetches = AtomicInteger()
     val discoveryFetches = AtomicInteger()
@@ -186,6 +190,7 @@ class StubIdp(
 
     private fun discovery(exchange: HttpExchange) {
         discoveryFetches.incrementAndGet()
+        onDiscovery?.invoke()
         if (discoveryStatus != 200) return reply(exchange, discoveryStatus, """{"error":"unavailable"}""")
         val fields = linkedMapOf(
             "issuer" to (discoveryIssuer ?: issuer),

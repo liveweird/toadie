@@ -55,6 +55,9 @@ Connect** -> **Web Application**. Then:
 - **Sign-in redirect URI**: `https://<host>/api/v1/login/sso/callback` - exactly that path, no trailing
   slash, the same origin as `MAIL_APP_URL`. Production requires https; plain http is accepted only with
   `KTOR_DEVELOPMENT=true`.
+- **Sign-out redirect URI**: `https://<host>/login` (or the value of `SSO_POST_LOGOUT_REDIRECT_URI` when you
+  set it). Toadie sends the browser to Okta's end-session endpoint on sign-out; an unregistered redirect URI
+  makes Okta show an error page there (Toadie's own session is already gone by then).
 - **Assignments** decide who can sign in at all. Toadie creates an account on first sign-in for ANY user the
   application admits, so assign deliberately and ALSO set `SSO_ALLOWED_EMAIL_DOMAINS` (comma list; blank =
   any domain, which the app logs as a boot WARN).
@@ -66,7 +69,8 @@ Connect** -> **Web Application**. Then:
 
 **3. Configuration.** Required once enabled: `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`,
 `SSO_REDIRECT_URI` (or a correct `MAIL_APP_URL`); optional `SSO_LABEL` (default `Okta`), `SSO_SCOPES`
-(default `openid email profile`), `SSO_ALLOWED_EMAIL_DOMAINS`. An incomplete set makes the app refuse to
+(default `openid email profile`), `SSO_ALLOWED_EMAIL_DOMAINS`, `SSO_POST_LOGOUT_REDIRECT_URI` (where Okta
+returns the browser after sign-out; default `<origin of SSO_REDIRECT_URI>/login`). An incomplete set makes the app refuse to
 start - read the boot log, do not work around it.
 
 - **Compose:** add the variables to the `app` service's `environment` (or an untracked override file).
@@ -85,8 +89,22 @@ start - read the boot log, do not work around it.
 **4. Verify.** `curl -s https://<host>/api/v1/login/options` answers `{"sso":{"label":"Okta"}}` when it is on
 and `{"sso":null}` when it is off. Then sign in through the button with a test user assigned to the
 application. Administrator accounts and accounts with email MFA are never linked or taken over by an
-Okta email - they keep password login. Signing out of Toadie does not sign out of Okta. Keep at least one ADMIN with a password so admin access survives an Okta outage
+Okta email - they keep password login. Keep at least one ADMIN with a password so admin access survives an Okta outage
 (`.claude/docs/security.md` "SSO login (OIDC)", accepted risks).
+
+**Sign-out check (manual, against the real tenant - the stub cannot prove Okta's own behaviour).** Signing out
+of Toadie also ends the Okta session (RP-initiated logout; `.claude/docs/security.md` "SSO login (OIDC)"). With
+the sign-out redirect URI registered, check all four:
+1. Sign in through Okta, then **Sign out** in the account menu: you land on Toadie's `/login` with the
+   "You've been signed out" banner, and the next **Sign in with Okta** PROMPTS for credentials (no silent
+   sign-in).
+2. The same after the ID token expired: stay signed in for more than an hour (Okta ID tokens live one hour),
+   then sign out - Okta must still honour the expired `id_token_hint` and end the session.
+3. Signing out of Toadie when the Okta session already ended elsewhere (sign out of Okta in another tab, or
+   let it time out) lands cleanly on `/login`, with no Okta error page.
+4. If a DIFFERENT Okta user is signed in in that browser, note what Okta shows at the end-session step
+   (a confirmation page, or it ignores the hint) - the sign-out must still end on `/login` or at a page
+   from which "Sign in with Okta" works.
 
 **Unlinking an identity.** In the Users list, the account's Operations menu has **Unlink SSO identity**
 (not on your own row; a passwordless account gets an extra warning). It clears the stored Okta subject and
@@ -115,7 +133,8 @@ docker compose -p toadie-check -f docker-compose.yaml -f e2e/compose.sso.yaml do
 (`sso.spec.ts` skips itself when SSO is off and fails under `CI`.) The base file's fixed container names
 and ports mean a second project cannot run beside the long-lived `toadie` stack unchanged: add an extra
 untracked override file that renames the containers and shifts the published ports (and set
-`STUB_IDP_PORT` / `SSO_REDIRECT_URI` plus `E2E_BASE_URL` to match), and never `down -v` the default project.
+`STUB_IDP_PORT` / `SSO_REDIRECT_URI` / `SSO_POST_LOGOUT_REDIRECT_URI` (the stub accepts only this registered
+sign-out redirect, e.g. `http://localhost:18081/login`) plus `E2E_BASE_URL` to match), and never `down -v` the default project.
 
 ## Reproducibility — what is pinned, and what deliberately is not
 
