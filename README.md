@@ -136,6 +136,9 @@ Create App Integration, and choose **OIDC - OpenID Connect** → **Web Applicati
 - Grant type: **Authorization Code**.
 - Turn on **Require PKCE**.
 - Sign-in redirect URI: `https://<your-toadie-host>/api/v1/login/sso/callback`, exactly that path.
+- Sign-out redirect URI: `https://<your-toadie-host>/login` (or your `SSO_POST_LOGOUT_REDIRECT_URI`).
+  Without it Okta refuses the sign-out and shows an error page; Toadie has already signed you out
+  locally by then.
 - Assign the users or groups who may sign in. Toadie creates an account on the first sign-in of
   anyone the application admits.
 - Copy the client ID and client secret from the General tab.
@@ -191,7 +194,11 @@ and the log says which setting is the problem.
     (an administrator's access token; 204 on success), and the next Okta sign-in creates a fresh
     account.
   Unlinking your own account is refused; ask another administrator.
-- Signing out of Toadie does not sign you out of Okta.
+- Signing out of Toadie also signs you out of Okta: the browser is sent to Okta's sign-out page
+  and returns to Toadie's `/login`, so the next "Sign in with Okta" asks for an identity again.
+  This needs the sign-out redirect URI from step 1 and an Okta session started by this Toadie
+  sign-in (a session whose ID token Toadie could not keep, or a provider without an
+  end-session endpoint, signs out of Toadie only).
 - Keep at least one administrator with a password: if Okta is down and every administrator signs in
   only through it, nobody can get in as admin (details in the security rules linked below).
 

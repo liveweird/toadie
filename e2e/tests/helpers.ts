@@ -77,10 +77,15 @@ export function accountMenu(page: Page) {
   return page.getByRole("button", { name: /Account menu$/ });
 }
 
-/** Sign out through the account menu (the former header Logout button). */
+/**
+ * Sign out through the account menu (the former header Logout button) and wait for the sign-in
+ * page. An SSO session leaves for the identity provider's end-session URL first and only then
+ * returns to /login, so the URL is the readiness signal for both kinds of session.
+ */
 export async function signOut(page: Page): Promise<void> {
   await accountMenu(page).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await page.waitForURL(/\/login$/);
 }
 
 /**

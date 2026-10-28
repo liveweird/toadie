@@ -54,6 +54,25 @@ that loses the overlay cannot go green (the Mailpit rule in `mfa.md`).*
 5. The administrator looks at the Users list again.
    - *Expected*: the **SSO** badge is back on the row. The administrator deletes the account.
 
+## Scenario: signing out of Toadie also ends the identity provider's session
+
+*The stub identity provider remembers the identity a sign-in used (a session cookie, as a real
+provider does); only Toadie's sign-out, through the provider's end-session endpoint, ends it.*
+
+1. A fresh identity signs in through **Sign in with Okta** (stub form, **Continue**).
+   - *Expected*: they are signed in and the stub now remembers them.
+2. Only Toadie's local session is dropped (browser storage cleared, no sign-out), and the visitor
+   presses **Sign in with Okta** again on `/login`.
+   - *Expected*: no stub form appears: the provider's live session completes the sign-in and the
+     visitor is back in the app.
+3. They sign out through the account menu.
+   - *Expected*: the browser goes through the provider's end-session endpoint and lands on
+     `/login` with the "You've been signed out." banner; nobody is signed in.
+4. They press **Sign in with Okta** once more.
+   - *Expected*: the stub's own sign-in form is shown again (the provider session is gone). They
+     press **Cancel** and see the cancelled alert.
+5. The administrator signs in, filters the Users list to that name and deletes the account.
+
 ## Scenario: cancelling at the identity provider returns to the sign-in page with a message
 
 1. From the sign-in page the visitor presses **Sign in with Okta** and chooses **Cancel** on the
@@ -80,6 +99,13 @@ that loses the overlay cannot go green (the Mailpit rule in `mfa.md`).*
   row, the id taken from the `login.sso_failure` event), self-unlink, the not-linked 404 and the
   `409` refusing a passwordless ADMIN or MFA-enabled account - server-tested (`SsoUnlinkTest`); the Users list never shows a deleted row, so there is no UI to
   drive.
-- **A real Okta tenant** - the manual tenant check is in the run-stack runbook ("Enable Okta SSO").
+- **The stub's strictness is the proof of the logout URL**: `/logout` answers `400` without a valid
+  `id_token_hint` (signature, issuer, audience) or with an unregistered `post_logout_redirect_uri`,
+  so the journey passing means the app sent both correctly. The URL's exact shape, the `204`
+  fallbacks (no ID token, no `end_session_endpoint`, discovery unusable) and the audit field are
+  server-tested (`SsoSignOutTest`); the banner flag's round trip is unit-tested (`UserMenu.test.tsx`,
+  `auth.test.tsx`, `Login.test.tsx`).
+- **A real Okta tenant** - the manual tenant check is in the run-stack runbook ("Enable Okta SSO"),
+  including the sign-out checks (expired ID token, Okta session already ended, another Okta user).
 - **The SPA's callback failure states** (invalid or reused link, throttled exchange) - unit-tested
   (`SsoCallback.test.tsx`, `Login.test.tsx`).
