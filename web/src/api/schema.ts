@@ -585,6 +585,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink a user's single sign-on identity (ADMIN only)
+         * @description ADMIN only. Clears the account's external identity (issuer + subject) and advances the
+         *     credential version in one step, so every outstanding session of the target ends and a
+         *     sign-in already in flight at the identity provider can no longer complete. The account
+         *     itself, its role and its password (if any) are untouched. Idempotence is deliberately not
+         *     offered: an account with no linked identity answers `404`, so a stale "Unlink" never looks
+         *     like a success.
+         *
+         *     **Re-linking.** Nothing is remembered: the next SSO sign-in whose verified email matches
+         *     the account links it again under the ordinary rule (never an ADMIN, never an account with
+         *     MFA enabled, never one linked to another identity). A new subject for the same email is
+         *     therefore "unlink, then sign in".
+         *
+         *     **A passwordless account** (`hasPassword` false, SSO-only) can be unlinked: until the
+         *     person signs in through the provider again, or an administrator sets a password, nobody
+         *     can sign in to it.
+         *
+         *     **The one documented exception on `/users/{id}`:** the row may be SOFT-DELETED. A deleted
+         *     account keeps its link and so keeps refusing that identity at sign-in (`account_deleted`
+         *     in the `login.sso_failure` audit event, which carries the row's `userId`); unlinking it
+         *     releases the identity, which then signs in as a brand-new account. A service account is
+         *     never linked and is a `404`.
+         *
+         *     Unlinking YOUR OWN identity is a `403`, decided before any lookup. The route is available
+         *     whether or not SSO is currently enabled. Audited as `user.sso_unlinked`.
+         */
+        delete: operations["unlinkUserSso"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/password": {
         parameters: {
             query?: never;
@@ -5664,6 +5709,47 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    unlinkUserSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Caller is not ADMIN, or attempted to unlink their own identity */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such user (or a service account), or the user has no single sign-on identity linked. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
             500: components["responses"]["InternalServerError"];
         };
     };

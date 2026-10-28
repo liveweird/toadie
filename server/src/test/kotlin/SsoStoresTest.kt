@@ -190,7 +190,7 @@ class SsoStoresTest {
         }
         assertEquals("account_invalid", invalid.reason)
         mapOf(
-            SsoLookup.Deleted to "account_deleted",
+            SsoLookup.Deleted(7u) to "account_deleted",
             SsoLookup.LinkRefused to "link_refused",
             SsoLookup.SubjectConflict to "subject_conflict",
         ).forEach { (verdict, reason) ->
@@ -198,6 +198,8 @@ class SsoStoresTest {
                 resolve(SsoAccounts({ _, _, _ -> verdict }) { error("must not create") }, name = null)
             }
             assertEquals(reason, failure.reason)
+            // Only the deleted-account refusal names its row (the id an admin releases with DELETE /users/{id}/sso).
+            assertEquals(if (verdict is SsoLookup.Deleted) 7u else null, failure.userId)
         }
         assertEquals(SsoOutcome.EXISTING, resolve(SsoAccounts({ _, _, _ -> SsoLookup.Existing(1u) }) { error("no") }, name = null).outcome)
         assertEquals(SsoOutcome.LINKED, resolve(SsoAccounts({ _, _, _ -> SsoLookup.Linked(1u) }) { error("no") }, name = null).outcome)

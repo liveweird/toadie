@@ -42,8 +42,8 @@ sealed interface SsoLookup {
     /** An unlinked active account with the same email was linked just now. */
     data class Linked(val userId: UInt) : SsoLookup
 
-    /** The identity belongs to a soft-deleted account — refused, never recreated. */
-    data object Deleted : SsoLookup
+    /** The identity belongs to the soft-deleted account [userId] — refused, never recreated; the id lets an admin release it. */
+    data class Deleted(val userId: UInt) : SsoLookup
 
     /** The same-email account is an ADMIN or has MFA enabled — never linked from an IdP-asserted email. */
     data object LinkRefused : SsoLookup
@@ -53,6 +53,18 @@ sealed interface SsoLookup {
 
     /** No account has this identity or this email. */
     data object Unknown : SsoLookup
+}
+
+/** The verdict of [UserService.unlinkSso]. */
+sealed interface SsoUnlink {
+    /** The link was cleared; [previous] is the row as it was (its stored issuer names the audit host), [wasDeleted] a soft-deleted one. */
+    data class Unlinked(val previous: User, val wasDeleted: Boolean) : SsoUnlink
+
+    /** The human row exists but carries no SSO identity. */
+    data object NotLinked : SsoUnlink
+
+    /** No such row, or a service account. */
+    data object NotFound : SsoUnlink
 }
 
 /** What the email-matched account is, as far as [ssoLinkVerdict] needs to know. */
@@ -181,7 +193,7 @@ class UserService(private val database: R2dbcDatabase) {
             .singleOrNull()
         if (identity != null) {
             return@suspendTransaction when {
-                identity[Users.markedAsDeleted] -> SsoLookup.Deleted
+                identity[Users.markedAsDeleted] -> SsoLookup.Deleted(identity[Users.id].value)
                 else -> SsoLookup.Existing(identity[Users.id].value)
             }
         }
@@ -212,6 +224,31 @@ class UserService(private val database: R2dbcDatabase) {
                 SsoLookup.Linked(id)
             }
         }
+    }
+
+    /**
+     * Admin release of an account's SSO identity: NULLs `(sso_issuer, sso_subject)` (both together, the V48 CHECK) and bumps
+     * `auth_version` so every session — and any hand-off a callback already issued — stops working, in ONE transaction under
+     * the row's lock. The next SSO sign-in with the same email links again ([ssoLinkVerdict]); the full unique index is untouched.
+     *
+     * Deliberately NOT [lockedUser]: that is [human]-scoped (active rows only), while this is the one `/users/{id}` operation that
+     * also reaches a SOFT-DELETED human row — its link is what refuses the identity at sign-in (`account_deleted`), so releasing
+     * it is the only way to re-admit that identity. A service account (never SSO-linked) stays [SsoUnlink.NotFound].
+     */
+    suspend fun unlinkSso(id: UInt): SsoUnlink = suspendTransaction(database) {
+        val row = Users.selectAll()
+            .where { (Users.id eq id) and (Users.serviceAccount eq false) }
+            .forUpdate()
+            .toList()
+            .singleOrNull()
+            ?: return@suspendTransaction SsoUnlink.NotFound
+        if (row[Users.ssoSubject] == null) return@suspendTransaction SsoUnlink.NotLinked
+        Users.update({ Users.id eq id }) {
+            it[ssoIssuer] = null
+            it[ssoSubject] = null
+            it[authVersion] = authVersion + 1
+        }
+        SsoUnlink.Unlinked(row.toUser(), row[Users.markedAsDeleted])
     }
 
     // The plaintext rules (min length, bcrypt byte ceiling) are route-side by necessity:

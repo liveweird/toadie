@@ -14,8 +14,11 @@ import io.ktor.server.plugins.BadRequestException
 /** How a successful SSO sign-in reached its account — the audit `outcome`. */
 enum class SsoOutcome(val wire: String) { EXISTING("existing"), LINKED("linked"), CREATED("created") }
 
-/** Why an otherwise valid sign-in is refused — [reason] is the audit vocabulary, every one ends as `not_allowed`. */
-class SsoAccountRefusedException(val reason: String) : RuntimeException("SSO account refused: $reason")
+/**
+ * Why an otherwise valid sign-in is refused — [reason] is the audit vocabulary, every one ends as `not_allowed`. [userId] is the
+ * soft-deleted account of an `account_deleted` refusal, so an admin can find the row to release (`DELETE /users/{id}/sso`).
+ */
+class SsoAccountRefusedException(val reason: String, val userId: UInt? = null) : RuntimeException("SSO account refused: $reason")
 
 /** The account a verified identity resolved to. */
 class SsoResolved(val userId: UInt, val outcome: SsoOutcome)
@@ -49,7 +52,7 @@ class SsoAccounts(
         when (val verdict = lookup(issuer, token.subject, token.email)) {
             is SsoLookup.Existing -> SsoResolved(verdict.userId, SsoOutcome.EXISTING)
             is SsoLookup.Linked -> SsoResolved(verdict.userId, SsoOutcome.LINKED)
-            SsoLookup.Deleted -> throw SsoAccountRefusedException("account_deleted")
+            is SsoLookup.Deleted -> throw SsoAccountRefusedException("account_deleted", verdict.userId)
             SsoLookup.LinkRefused -> throw SsoAccountRefusedException("link_refused")
             SsoLookup.SubjectConflict -> throw SsoAccountRefusedException("subject_conflict")
             SsoLookup.Unknown -> SsoResolved(createAccount(issuer, token), SsoOutcome.CREATED)

@@ -141,6 +141,7 @@ fun Application.configureSso() {
                         "email" to failure.email,
                         "sub" to failure.subject,
                         "host" to failure.host,
+                        "userId" to failure.userId?.toLong(),
                     )
                     // A request that did not prove it owns the attempt (state mismatch, replay) leaves the cookie alone.
                     if (failure.clearCookie) call.clearAttemptCookie()
