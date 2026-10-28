@@ -5,7 +5,7 @@
 # platform-independent artifacts: web/dist (static assets) and the installDist JARs. A multi-arch
 # build (linux/amd64 + linux/arm64) therefore compiles each once, natively; the runtime stage is
 # the only per-platform one, and its `RUN useradd` is the only instruction that is ever emulated.
-FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS web
+FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS web
 RUN apk add --no-cache git
 WORKDIR /web
 # Install deps first for layer caching. --legacy-peer-deps per web/ README
