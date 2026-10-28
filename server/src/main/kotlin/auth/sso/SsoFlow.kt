@@ -1,6 +1,7 @@
 package ch.nokillswit.auth.sso
 
 import ch.nokillswit.audit.audit
+import ch.nokillswit.auth.ProviderSignOutResult
 import ch.nokillswit.infra.catchingFailures
 import ch.nokillswit.infra.fetch.OperatorHttp
 import ch.nokillswit.infra.fetch.OperatorHttpException
@@ -92,7 +93,8 @@ class SsoFlow(
         if (!seenStates.firstUse(attempt.state, attempt.exp)) {
             throw SsoFlowException("state_invalid", SSO_ERROR_FAILED, clearCookie = false)
         }
-        val token = verifier.verify(exchangeCode(code, attempt), attempt.nonce)
+        val rawIdToken = exchangeCode(code, attempt)
+        val token = verifier.verify(rawIdToken, attempt.nonce)
         val resolved = try {
             accounts.resolve(config.issuer, token)
         } catch (refusal: SsoAccountRefusedException) {
@@ -101,8 +103,32 @@ class SsoFlow(
         auditAccount(resolved, token)
         // The version comes from the resolving transaction itself: a second read could see a later unlink's bump
         // and hand a session to an unlinked row.
-        SsoCallbackResult(handoffs.issue(resolved.userId, resolved.authVersion, bindHash(attempt.bind), resolved.outcome))
+        SsoCallbackResult(
+            handoffs.issue(resolved.userId, resolved.authVersion, bindHash(attempt.bind), resolved.outcome, rawIdToken),
+        )
     }
+
+    /**
+     * The provider's end-session location for [idToken] (OIDC RP-initiated logout): `id_token_hint` plus our
+     * `post_logout_redirect_uri`, no `state`. Never throws for a provider problem — an unreadable discovery is
+     * [ProviderSignOutResult.Unavailable] — and never logs the token or the URL; cancellation propagates unchanged.
+     */
+    suspend fun endSessionUrl(idToken: String): ProviderSignOutResult = catchingFailures(
+        {
+            val endpoint = discovery.endpoints().endSessionEndpoint
+            if (endpoint == null) {
+                ProviderSignOutResult.Unsupported
+            } else {
+                ProviderSignOutResult.Redirect(
+                    URLBuilder(endpoint).apply {
+                        parameters.append("id_token_hint", idToken)
+                        parameters.append("post_logout_redirect_uri", config.postLogoutRedirectUri)
+                    }.buildString(),
+                )
+            }
+        },
+        { ProviderSignOutResult.Unavailable },
+    )
 
     /** The token endpoint exchange (`client_secret_basic` + the PKCE verifier); returns the raw `id_token`. */
     private suspend fun exchangeCode(code: String, attempt: SsoAttempt): String {

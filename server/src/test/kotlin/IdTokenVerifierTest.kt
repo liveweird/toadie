@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -24,6 +25,7 @@ class IdTokenVerifierTest {
         clientId = stub.clientId,
         clientSecret = stub.clientSecret,
         redirectUri = "https://toadie.example.com/api/v1/login/sso/callback",
+        postLogoutRedirectUri = "https://toadie.example.com/login",
         scopes = "openid email profile",
         allowedEmailDomains = domains,
         allowHttp = allowHttp,
@@ -200,4 +202,49 @@ class IdTokenVerifierTest {
             assertEquals("http://localhost:9000/authorize", endpoints.authorizationEndpoint)
         }
     }
+
+    @Test
+    fun `the end-session endpoint is optional - absent is null, an unusable one is null with one warning that names only the field`() =
+        runBlocking<Unit> {
+            fun discoveryOf(stub: StubIdp, warnings: MutableList<String>, config: SsoConfig = config(stub)): SsoDiscovery {
+                val http = stub.http()
+                return SsoDiscovery(config, { http }, onWarn = { warnings += it })
+            }
+            StubIdp().use { stub ->
+                val warnings = mutableListOf<String>()
+                val endpoints = discoveryOf(stub, warnings).endpoints()
+                assertNull(endpoints.endSessionEndpoint)
+                assertTrue(warnings.isEmpty(), "an absent optional member is not worth a log line")
+            }
+            StubIdp().use { stub ->
+                stub.discoveryOverrides = mapOf("end_session_endpoint" to "${stub.issuer}/v1/logout")
+                val warnings = mutableListOf<String>()
+                assertEquals("${stub.issuer}/v1/logout", discoveryOf(stub, warnings).endpoints().endSessionEndpoint)
+                assertTrue(warnings.isEmpty())
+            }
+            // Unusable values never fail discovery (login keeps working): null plus exactly one warning, never the value.
+            listOf(
+                "http://idp.example.com/logout",
+                "not a url",
+                "https://user:pw@idp.example.com/logout",
+                "https://idp.example.com/logout#frag",
+            ).forEach { bad ->
+                StubIdp().use { stub ->
+                    stub.discoveryOverrides = mapOf("end_session_endpoint" to bad)
+                    val warnings = mutableListOf<String>()
+                    val endpoints = discoveryOf(stub, warnings).endpoints()
+                    assertNull(endpoints.endSessionEndpoint, bad)
+                    assertEquals(1, warnings.size, bad)
+                    assertTrue("end_session_endpoint" in warnings.single())
+                    assertTrue(warnings.single().none { it == '/' }, "no URL in the warning")
+                    assertEquals("${stub.issuer}/v1/token", endpoints.tokenEndpoint)
+                }
+            }
+            // Development accepts an http end-session endpoint like the others.
+            StubIdp().use { stub ->
+                stub.discoveryOverrides = mapOf("end_session_endpoint" to "http://localhost:9000/logout")
+                val endpoints = discoveryOf(stub, mutableListOf(), config(stub, allowHttp = true)).endpoints()
+                assertEquals("http://localhost:9000/logout", endpoints.endSessionEndpoint)
+            }
+        }
 }

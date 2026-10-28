@@ -139,6 +139,40 @@ class SsoConfigTest {
     }
 
     @Test
+    fun `the post-logout redirect URI defaults to the redirect URI's origin plus the login page and an override is validated like a URL`() {
+        assertEquals("http://localhost:8081/login", assertNotNull(config()).postLogoutRedirectUri)
+        val explicit = "https://toadie.example.com:8443/api/v1/login/sso/callback"
+        assertEquals(
+            "https://toadie.example.com:8443/login",
+            assertNotNull(config("sso.redirectUri" to explicit, development = false)).postLogoutRedirectUri,
+        )
+        // Blank is "not configured"; a configured value is honoured as is and has NO path rule (unlike the callback).
+        assertEquals("http://localhost:8081/login", assertNotNull(config("sso.postLogoutRedirectUri" to "  ")).postLogoutRedirectUri)
+        assertEquals(
+            "https://toadie.example.com/signed-out",
+            assertNotNull(
+                config(
+                    "sso.postLogoutRedirectUri" to " https://toadie.example.com/signed-out ",
+                    development = false,
+                    mailAppUrl = "https://toadie.example.com",
+                ),
+            ).postLogoutRedirectUri,
+        )
+        // Production: https only; always no credentials, query or fragment — the message names the property, never the value.
+        val http = refused(
+            "sso.postLogoutRedirectUri" to "http://toadie.example.com/login",
+            development = false,
+            mailAppUrl = "https://toadie.example.com",
+        )
+        assertTrue("sso.postLogoutRedirectUri" in http && "toadie.example.com" !in http)
+        refused("sso.postLogoutRedirectUri" to "https://user:pw@toadie.example.com/login")
+        refused("sso.postLogoutRedirectUri" to "https://toadie.example.com/login?x=1")
+        refused("sso.postLogoutRedirectUri" to "https://toadie.example.com/login#f")
+        refused("sso.postLogoutRedirectUri" to "/login")
+        assertNotNull(config("sso.postLogoutRedirectUri" to "http://localhost:8081/login", development = true))
+    }
+
+    @Test
     fun `an issuer over the 512 character column is refused, one at the limit is not`() {
         val prefix = "https://tenant.okta.com/"
         assertTrue("512" in refused("sso.issuer" to prefix + "x".repeat(513 - prefix.length)))

@@ -153,6 +153,7 @@ the `issuer` in `<issuer>/.well-known/openid-configuration` exactly, with no tra
 | `SSO_CLIENT_ID` | yes | from the Okta application |
 | `SSO_CLIENT_SECRET` | yes | from the Okta application; keep it in a secret, never in git |
 | `SSO_REDIRECT_URI` | if `MAIL_APP_URL` is not your public URL | the redirect URI from step 1 |
+| `SSO_POST_LOGOUT_REDIRECT_URI` | no | where Okta sends the browser after "sign out of Okta too"; default `<your origin>/login`; register it as a sign-out redirect URI in the Okta application |
 | `SSO_ALLOWED_EMAIL_DOMAINS` | recommended | comma-separated domains allowed to sign in, e.g. `example.com` |
 | `SSO_LABEL` | no | the button's provider name, default `Okta` |
 | `SSO_SCOPES` | no | default `openid email profile` |

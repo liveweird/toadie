@@ -30,6 +30,7 @@ import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveNullable
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -76,6 +77,13 @@ data class RefreshRequest(val refreshToken: String)
 @Serializable
 data class LogoutRequest(val refreshToken: String? = null)
 
+/**
+ * The `200` body of `POST /logout` for an SSO session whose provider advertises an end-session endpoint: the location the
+ * SPA navigates to so the provider's own session ends too. Carries the ID token as `id_token_hint` — never log or audit it.
+ */
+@Serializable
+data class LogoutResponse(val endSessionUrl: String)
+
 @Serializable
 data class LoginResponse(
     val token: String,
@@ -109,6 +117,8 @@ internal suspend fun JwtConfig.authResponse(
     user: User,
     sessions: AuthSessionService,
     existingSessionId: String? = null,
+    /** The SSO sign-in's raw ID token, stored with a NEW session only (a refresh keeps the row, hence the token). */
+    idToken: String? = null,
 ): LoginResponse {
     val roles = user.additionalRoles
     val sessionId = existingSessionId ?: UUID.randomUUID().toString()
@@ -116,7 +126,7 @@ internal suspend fun JwtConfig.authResponse(
     val refresh = issueRefreshToken(userId, user.email, roles, user.disabledFeatures, sessionId)
     val expiresAt = maxOf(access.expiresAt, refresh.expiresAt)
     val active = if (existingSessionId == null) {
-        sessions.create(sessionId, userId, user.authVersion, expiresAt)
+        sessions.create(sessionId, userId, user.authVersion, expiresAt, idToken)
     } else {
         sessions.renew(sessionId, userId, user.authVersion, expiresAt)
     }
@@ -381,7 +391,8 @@ fun Application.configureAuthRoutes() {
                 val principal = call.principal<JWTPrincipal>()!!
                 val userId = principal.payload.sessionUserId()!!
                 val sessionId = principal.payload.getClaim("sid").asString()!!
-                sessions.revoke(sessionId, userId)
+                // Revocation first, then anything that can wait on the provider: the ID token leaves the database with its row.
+                val idToken = sessions.revoke(sessionId, userId)
                 val jti = principal.payload.id
                 val exp = principal.payload.expiresAt?.time ?: System.currentTimeMillis()
                 if (jti != null) {
@@ -432,12 +443,23 @@ fun Application.configureAuthRoutes() {
                         blocklist.revoke(rjti, decoded.expiresAt?.time ?: System.currentTimeMillis())
                     }
                 }
+                // Only a session that held an ID token is an SSO session we can sign out of the provider; absent `sso` = none held.
+                val signOut = idToken?.let { token ->
+                    call.application.attributes.getOrNull(ProviderSignOutKey)?.endSessionUrl(token) ?: ProviderSignOutResult.Unsupported
+                }
                 audit(
                     "logout",
                     "userId" to principal.payload.getClaim("userId").asLong(),
                     "email" to principal.payload.getClaim("email").asString(),
+                    "sso" to signOut?.auditWire,
                 )
-                call.respond(HttpStatusCode.NoContent)
+                if (signOut is ProviderSignOutResult.Redirect) {
+                    // The URL embeds the ID token: never cached anywhere.
+                    call.response.header("Cache-Control", "no-store")
+                    call.respond(HttpStatusCode.OK, LogoutResponse(signOut.url))
+                } else {
+                    call.respond(HttpStatusCode.NoContent)
+                }
             }
         }
     }

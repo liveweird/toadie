@@ -405,6 +405,7 @@ describe("deployment and verification safety defaults", () => {
       "SSO_ENABLED",
       "SSO_ISSUER",
       "SSO_LABEL",
+      "SSO_POST_LOGOUT_REDIRECT_URI",
       "SSO_REDIRECT_URI",
       "SSO_SCOPES",
     ]);

@@ -298,6 +298,15 @@ export interface paths {
          *     pairs superseded by refresh. Other logins/devices remain active. The optional
          *     `refreshToken` body is accepted for compatibility but is not required for full revocation;
          *     a token belonging to another family or user cannot revoke that unrelated session.
+         *
+         *     The session is revoked FIRST, whatever follows. A session that came from single sign-on
+         *     and still holds its identity provider's ID token, on a deployment whose provider
+         *     advertises an `end_session_endpoint` (OIDC RP-initiated logout), answers `200` with the
+         *     provider location the client should navigate to so the provider's own session ends too
+         *     (`Cache-Control: no-store`; the URL carries the ID token as `id_token_hint`, so it is
+         *     never logged or cached). Every other logout — a password session, a provider without
+         *     an end-session endpoint, a discovery document that cannot be read right now, an ID token
+         *     that was not retained — answers `204`, exactly as before.
          */
         post: operations["logout"];
         delete?: never;
@@ -2849,6 +2858,14 @@ export interface components {
             /** @description Optional same-session refresh token; logout revokes the entire family even without it. */
             refreshToken?: string;
         };
+        LogoutResponse: {
+            /**
+             * Format: uri
+             * @description The identity provider's end-session location (`id_token_hint` and `post_logout_redirect_uri`
+             *     already attached) the client navigates to. Contains the ID token: never store or log it.
+             */
+            endSessionUrl: string;
+        };
         UserCreateRequest: {
             name: string;
             /** @description The `toadie.invalid` domain is reserved for service accounts (`400`). */
@@ -5254,6 +5271,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Session revoked; the identity provider's sign-out location follows */
+            200: {
+                headers: {
+                    /** @description Always `no-store`. */
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogoutResponse"];
+                };
+            };
             /** @description Session revoked */
             204: {
                 headers: {
