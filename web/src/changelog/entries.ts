@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.33.0",
+    date: "2026-10-28",
+    en: `**Unlink an Okta identity.** Administrators can unlink a user's Okta sign-in from the Users list: the user is signed out everywhere, and their next Okta sign-in links the account again by email. This moves an account to a new Okta identity, and also re-admits an Okta identity whose account was deleted. An administrator or MFA-enabled account without a password needs one set first.`,
+    pl: `**Odłączanie tożsamości Okta.** Administratorzy/administratorki mogą odłączyć logowanie przez Okta od konta na liście Użytkowników: osoba zostaje wylogowana ze wszystkich sesji, a jej następne logowanie przez Okta ponownie łączy konto po adresie e-mail. Pozwala to przenieść konto na nową tożsamość Okta, a także ponownie dopuścić tożsamość Okta, której konto usunięto. Konto administratora/administratorki lub konto z MFA bez hasła wymaga najpierw ustawienia hasła.`,
+  },
+  {
     version: "2.32.5",
     date: "2026-10-28",
     en: `**Sign-in internals, consolidated.** Under the hood only: the stores behind email codes and Okta sign-in now share one tested building block, which prepares the ground for running more than one server.`,

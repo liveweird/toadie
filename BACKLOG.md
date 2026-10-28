@@ -39,13 +39,6 @@ promotes it. A finished item is removed, not ticked.
   (or fetch a fresh one), redirect through it with a `post_logout_redirect_uri` registered in the
   Okta application, and decide what a provider without the endpoint does. Update the "Exception"
   line of `.claude/docs/security.md` "SSO login (OIDC)" and the run-stack runbook with it.
-- [new] **Let an admin unlink or re-link an SSO identity.** A linked identity is permanent today:
-  there is no way to move an account to another Okta subject, detach SSO from an account, or
-  re-admit an identity whose linked account was deleted (the V48 `(issuer, subject)` index covers
-  deleted rows, so that identity stays refused with `account_deleted`). Add an ADMIN action on the
-  Users row with its audit event and docs line, and decide whether unlinking an account that has no
-  password must first set one.
-
 - [new] **Bound the unauthenticated MFA and SSO-exchange fields.** `MfaVerifyRequest`
   (`challengeId`, `code`) and `SsoExchangeRequest.code` declare no `maxLength` in the OpenAPI
   contract and have no route-side length check, so a ~10 MiB value is encoded and hashed while the
