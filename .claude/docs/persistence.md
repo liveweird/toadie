@@ -793,9 +793,9 @@ NULL, `(sso_issuer IS NULL) = (sso_subject IS NULL)`); `ck_users_service_account
 service account (V41) from carrying a link. The identity index `uq_users_sso_identity` over
 `(sso_issuer, sso_subject)` is a FULL unique index, **the deliberate exception to the partial-index
 idiom of "Freeing a unique business field on delete"**: a soft-deleted user keeps its link, so
-deleting an account really revokes its SSO access and the same external identity can never silently
-recreate it (only `DELETE /users/{id}/sso` NULLs the pair, deleted rows included — a data update that
-leaves the index and both CHECKs untouched). NULL pairs (every password-only account) never collide. Exposed: `Users.passwordHash` is
+deleting an account really revokes its SSO access and the same external identity cannot recreate it
+unless an ADMIN releases the link (only `DELETE /users/{id}/sso` NULLs the pair, deleted rows included
+— a data update that leaves the index and both CHECKs untouched). NULL pairs (every password-only account) never collide. Exposed: `Users.passwordHash` is
 `.nullable()` and `ssoIssuer`/`ssoSubject` are new nullable columns; `User.passwordHash` is `String?`
 with derived `sso`/`hasPassword` flags, surfaced on `UserResponse` and (`hasPassword`) `LoginResponse`.
 `rotatePasswordIfHashMatches`/`countActiveWithPasswordHash` compare against a concrete hash, which a

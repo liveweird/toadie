@@ -367,6 +367,23 @@ object TestUsers {
             .map { it[UserService.Users.passwordHash] }.toList().single()
     }
 
+    /**
+     * The row-level steps of [UserService.unlinkSso] with a pause in the middle: locks the row (FOR UPDATE), runs [whileLocked]
+     * (the test holds the lock open there), then clears the SSO pair and bumps `auth_version`, committing at the end. Lets a
+     * test order a concurrent reader deterministically against an unlink.
+     */
+    suspend fun unlinkHoldingLock(id: UInt, whileLocked: suspend () -> Unit) {
+        suspendTransaction(sharedTestDatabase) {
+            UserService.Users.selectAll().where { UserService.Users.id eq id }.forUpdate().toList()
+            whileLocked()
+            UserService.Users.update({ UserService.Users.id eq id }) {
+                it[UserService.Users.ssoIssuer] = null
+                it[UserService.Users.ssoSubject] = null
+                it[UserService.Users.authVersion] = UserService.Users.authVersion + 1
+            }
+        }
+    }
+
     /** Direct soft-delete for fixtures needing to bypass the endpoint's guards. */
     suspend fun softDelete(id: UInt) {
         suspendTransaction(sharedTestDatabase) {

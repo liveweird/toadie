@@ -89,7 +89,6 @@ fun Application.configureSso() {
         seenStates = SsoSeenStates(clock = { clock.millis() }),
         handoffs = handoffs,
         accounts = SsoAccounts(users),
-        users = users,
         // The class name only (the observability.md rule): a database or driver message can quote data.
         onFailureLog = { cause -> log.warn("SSO callback failed unexpectedly ({})", cause.javaClass.name) },
     )

@@ -1,6 +1,8 @@
 package ch.nokillswit
 
+import ch.nokillswit.auth.RefreshRequest
 import ch.nokillswit.plugins.ProblemDetail
+import ch.nokillswit.users.SsoLookup
 import ch.nokillswit.users.UserResponse
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
@@ -12,6 +14,11 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -67,6 +74,13 @@ class SsoUnlinkTest {
                 assertEquals(HttpStatusCode.NotFound, svc.status)
                 assertEquals("User not found", svc.body<ProblemDetail>().detail)
 
+                val deletedUnlinked =
+                    TestUsers.seed(email = uniqueEmail("sso-unlink-gone"), password = "password-1234", role = UserRole.USER)
+                TestUsers.softDelete(deletedUnlinked)
+                val gone = admin.delete(ssoPath(deletedUnlinked))
+                assertEquals(HttpStatusCode.NotFound, gone.status)
+                assertEquals("User not found", gone.body<ProblemDetail>().detail)
+
                 val plain = TestUsers.seed(email = uniqueEmail("sso-unlink-nolink"), password = "password-1234", role = UserRole.USER)
                 val notLinked = admin.delete(ssoPath(plain))
                 assertEquals(HttpStatusCode.NotFound, notLinked.status)
@@ -92,12 +106,17 @@ class SsoUnlinkTest {
                 bearer.get("/api/v1/users/$id") { header(HttpHeaders.Authorization, "Bearer ${session.token}") }.status
             assertEquals(HttpStatusCode.OK, readAsSso())
             assertTrue(admin.userOf(id).sso)
+            val refresh = jsonClient()
+            suspend fun refreshAsSso(): HttpStatusCode =
+                refresh.postJson("/api/v1/refresh", RefreshRequest(refreshToken = session.refreshToken)).status
 
             withAuditCapture { audit ->
                 assertEquals(HttpStatusCode.NoContent, admin.delete(ssoPath(id)).status)
 
                 // The credential epoch advanced: the access token minted before is dead.
                 assertEquals(HttpStatusCode.Unauthorized, readAsSso())
+                // ... and so is the refresh token that would have renewed it.
+                assertEquals(HttpStatusCode.Unauthorized, refreshAsSso())
                 val after = admin.userOf(id)
                 assertFalse(after.sso)
                 assertFalse(after.hasPassword, "the account stays passwordless: unlinking touches nothing else")
@@ -181,10 +200,14 @@ class SsoUnlinkTest {
                     val event = assertNotNull(audit.events.singleOrNull { it.message == "user.sso_unlinked" })
                     assertTrue(event.hasKeyValue("targetUserId", id.toLong()) && event.hasKeyValue("byUserId", adminId.toLong()))
                     assertTrue(event.hasKeyValue("deleted", true))
+                    assertTrue(event.hasKeyValue("issuerHost", "127.0.0.1"))
                     // The deleted row stays invisible on the ordinary surface.
                     assertEquals(HttpStatusCode.NotFound, admin.get("/api/v1/users/$id").status)
-                    // Releasing it twice is a 404 like any unlinked row.
-                    assertEquals(HttpStatusCode.NotFound, admin.delete(ssoPath(id)).status)
+                    // Released, the deleted row is just a deleted row: a plain "User not found", never the "not linked" detail,
+                    // so the deleted-row exception only ever reveals or affects LINKED deleted rows.
+                    val again = admin.delete(ssoPath(id))
+                    assertEquals(HttpStatusCode.NotFound, again.status)
+                    assertEquals("User not found", again.body<ProblemDetail>().detail)
 
                     val fresh = browser.signInAndExchange(stub, claims)
                     assertNotEquals(id, fresh.userId)
@@ -201,6 +224,88 @@ class SsoUnlinkTest {
         assertTrue(admin.userOf(id).sso)
         assertEquals(HttpStatusCode.NoContent, admin.delete(ssoPath(id)).status)
         assertFalse(admin.userOf(id).sso)
+    }
+
+    @Test
+    fun `a passwordless ADMIN or MFA-enabled account is refused with 409 password-not-set, a passwordless plain user is not`() =
+        testApplication {
+            StubIdp().use { stub ->
+                ssoApp(stub)
+                val (admin, _) = adminClient()
+                withAuditCapture { audit ->
+                    suspend fun assertPasswordRequired(id: UInt) {
+                        val response = admin.delete(ssoPath(id))
+                        assertEquals(HttpStatusCode.Conflict, response.status)
+                        assertEquals("urn:toadie:password-not-set", response.body<ProblemDetail>().type)
+                        assertNotNull(assertNotNull(TestUsers.service.read(id)).ssoSubject, "the refused unlink changes nothing")
+                    }
+                    val passwordlessAdmin =
+                        TestUsers.seedPasswordless(uniqueEmail("sso-unlink-padmin"), role = UserRole.ADMIN, issuer = stub.issuer)
+                    assertPasswordRequired(passwordlessAdmin)
+
+                    val mfaUser = TestUsers.seedPasswordless(uniqueEmail("sso-unlink-pmfa"), issuer = stub.issuer)
+                    TestUsers.service.setDisabledFeatures(mfaUser, emptySet())
+                    assertPasswordRequired(mfaUser)
+
+                    // A plain passwordless USER (MFA off) re-links by email, so it is releasable.
+                    val plain = TestUsers.seedPasswordless(uniqueEmail("sso-unlink-pplain"), issuer = stub.issuer)
+                    assertEquals(HttpStatusCode.NoContent, admin.delete(ssoPath(plain)).status)
+                    assertEquals(1, audit.events.count { it.message == "user.sso_unlinked" }, "only the allowed unlink audits")
+                }
+            }
+        }
+
+    @Test
+    fun `an administrator with a password can be unlinked, and its next SSO sign-in is link_refused`() = testApplication {
+        StubIdp().use { stub ->
+            ssoApp(stub)
+            val browser = browser()
+            val (admin, _) = adminClient()
+            val email = uniqueEmail("sso-unlink-padmin2")
+            val subject = "sub-${UUID.randomUUID()}"
+            val id = TestUsers.seed(email = email, password = "password-1234", role = UserRole.ADMIN)
+            TestUsers.forceSsoIdentity(id, stub.issuer, subject)
+            withAuditCapture { audit ->
+                assertEquals(HttpStatusCode.NoContent, admin.delete(ssoPath(id)).status)
+                // The consequence, documented: an ADMIN never re-links by email, so the identity is simply refused now.
+                assertRefusedNotAllowed(browser, stub, mapOf("email" to email, "sub" to subject))
+                assertNotNull(failureOf(audit, "link_refused"))
+                assertFalse(admin.userOf(id).sso)
+            }
+        }
+    }
+
+    @Test
+    fun `the identity lookup locks its row and reads the credential version in its own transaction`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("sso-lookup-lock")
+        val issuer = "https://idp.test/${UUID.randomUUID()}"
+        val subject = "sub-${UUID.randomUUID()}"
+        val id = TestUsers.seedPasswordless(email, issuer = issuer, subject = subject)
+        val before = assertNotNull(TestUsers.service.read(id)).authVersion
+        // The version the hand-off is issued from is the one the lookup itself saw.
+        assertEquals(SsoLookup.Existing(id, before), TestUsers.service.resolveSsoIdentity(issuer, subject, email))
+
+        val locked = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        withContext(Dispatchers.Default) {
+            // An unlink (the same row-level steps as UserService.unlinkSso), held open mid-transaction.
+            val unlink = async {
+                TestUsers.unlinkHoldingLock(id) {
+                    locked.complete(Unit)
+                    release.await()
+                }
+            }
+            locked.await()
+            val lookup = async { TestUsers.service.resolveSsoIdentity(issuer, subject, email) }
+            assertNull(withTimeoutOrNull(500) { lookup.await() }, "the lookup waits for the unlink's row lock")
+            release.complete(Unit)
+            unlink.await()
+            // The unlink won: the identity no longer matches, so the callback links by the ordinary rule at the NEW version -
+            // it can never pair the old hand-off version with an unlinked row.
+            assertEquals(SsoLookup.Linked(id, before + 1), lookup.await())
+        }
+        assertNotNull(assertNotNull(TestUsers.service.read(id)).ssoSubject)
     }
 
     private suspend fun assertRefusedNotAllowed(browser: HttpClient, stub: StubIdp, claims: Map<String, Any?>) =

@@ -179,8 +179,10 @@ and the log says which setting is the problem.
   - *The person has a new Okta subject but the same email* (the Okta account was recreated): unlink,
     and their next Okta sign-in links the account again, because linking goes by email.
   - *Detach for good*: unlinking alone is not enough, since the next Okta sign-in with the same email
-    links the account again. Also turn on email MFA for the account (MFA accounts are never linked
-    by an Okta email) or unassign the person from the Okta application.
+    links the account again. First turn on email MFA for the account (MFA accounts are never linked
+    by an Okta email) or unassign the person from the Okta application, then unlink. A passwordless
+    administrator or MFA-enabled account cannot be unlinked until it has a password (the request is
+    refused with `409`): such accounts never re-link by Okta email, so it would lock them out.
   - *Re-admit an identity that was blocked by deleting its user*: a deleted user's Okta identity stays
     reserved. The refused sign-in's `login.sso_failure` audit event (reason `account_deleted`) carries
     the deleted account's `userId`; release it with

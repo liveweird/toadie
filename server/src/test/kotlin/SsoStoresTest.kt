@@ -201,7 +201,14 @@ class SsoStoresTest {
             // Only the deleted-account refusal names its row (the id an admin releases with DELETE /users/{id}/sso).
             assertEquals(if (verdict is SsoLookup.Deleted) 7u else null, failure.userId)
         }
-        assertEquals(SsoOutcome.EXISTING, resolve(SsoAccounts({ _, _, _ -> SsoLookup.Existing(1u) }) { error("no") }, name = null).outcome)
-        assertEquals(SsoOutcome.LINKED, resolve(SsoAccounts({ _, _, _ -> SsoLookup.Linked(1u) }) { error("no") }, name = null).outcome)
+        // The hand-off's version is the one the lookup returned, never a later read.
+        resolve(SsoAccounts({ _, _, _ -> SsoLookup.Existing(1u, 5L) }) { error("no") }, name = null).let {
+            assertEquals(SsoOutcome.EXISTING, it.outcome)
+            assertEquals(5L, it.authVersion)
+        }
+        resolve(SsoAccounts({ _, _, _ -> SsoLookup.Linked(1u, 6L) }) { error("no") }, name = null).let {
+            assertEquals(SsoOutcome.LINKED, it.outcome)
+            assertEquals(6L, it.authVersion)
+        }
     }
 }

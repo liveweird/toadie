@@ -237,6 +237,8 @@ fun Application.configureUserRoutes() {
                 val unlinked = when (val verdict = userService.unlinkSso(route.parent.id)) {
                     SsoUnlink.NotFound -> throw NotFoundException("User not found")
                     SsoUnlink.NotLinked -> throw NotFoundException("No single sign-on identity is linked to this user")
+                    // An ADMIN or MFA-enabled account never re-links by email: without a password it would be locked out.
+                    SsoUnlink.PasswordRequired -> throw PasswordNotSetException()
                     is SsoUnlink.Unlinked -> verdict
                 }
                 audit(

@@ -77,8 +77,8 @@ that loses the overlay cannot go green (the Mailpit rule in `mfa.md`).*
   first sign-in) - server-tested (`SsoLoginTest`, `IdTokenVerifierTest`, `SsoStoresTest`,
   `SsoConfigTest`); the stub never misbehaves on purpose.
 - **Releasing a deleted account's identity** (`DELETE /api/v1/users/<id>/sso` against a soft-deleted
-  row, the id taken from the `login.sso_failure` event), self-unlink and the not-linked 404 -
-  server-tested (`SsoUnlinkTest`); the Users list never shows a deleted row, so there is no UI to
+  row, the id taken from the `login.sso_failure` event), self-unlink, the not-linked 404 and the
+  `409` refusing a passwordless ADMIN or MFA-enabled account - server-tested (`SsoUnlinkTest`); the Users list never shows a deleted row, so there is no UI to
   drive.
 - **A real Okta tenant** - the manual tenant check is in the run-stack runbook ("Enable Okta SSO").
 - **The SPA's callback failure states** (invalid or reused link, throttled exchange) - unit-tested

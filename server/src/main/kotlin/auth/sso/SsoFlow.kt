@@ -4,7 +4,6 @@ import ch.nokillswit.audit.audit
 import ch.nokillswit.infra.catchingFailures
 import ch.nokillswit.infra.fetch.OperatorHttp
 import ch.nokillswit.infra.fetch.OperatorHttpException
-import ch.nokillswit.users.UserService
 import io.ktor.http.URLBuilder
 import java.net.URI
 import java.security.MessageDigest
@@ -54,7 +53,6 @@ class SsoFlow(
     private val seenStates: SsoSeenStates,
     private val handoffs: SsoHandoffs,
     private val accounts: SsoAccounts,
-    private val users: UserService,
     private val onFailureLog: (Throwable) -> Unit = {},
 ) {
     fun newAttempt(): SsoAttempt = cookies.newAttempt()
@@ -101,9 +99,9 @@ class SsoFlow(
             throw SsoFlowException(refusal.reason, SSO_ERROR_NOT_ALLOWED, token.email, token.subject, refusal, userId = refusal.userId)
         }
         auditAccount(resolved, token)
-        val user = users.read(resolved.userId)
-            ?: throw SsoFlowException("account_deleted", SSO_ERROR_NOT_ALLOWED, token.email, token.subject, userId = resolved.userId)
-        SsoCallbackResult(handoffs.issue(resolved.userId, user.authVersion, bindHash(attempt.bind), resolved.outcome))
+        // The version comes from the resolving transaction itself: a second read could see a later unlink's bump
+        // and hand a session to an unlinked row.
+        SsoCallbackResult(handoffs.issue(resolved.userId, resolved.authVersion, bindHash(attempt.bind), resolved.outcome))
     }
 
     /** The token endpoint exchange (`client_secret_basic` + the PKCE verifier); returns the raw `id_token`. */

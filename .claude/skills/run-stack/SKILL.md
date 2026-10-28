@@ -93,8 +93,10 @@ Okta email - they keep password login. Signing out of Toadie does not sign out o
 ends the account's sessions. The three cases:
 - *New Okta subject, same email* (the Okta user was recreated): unlink; the next Okta sign-in links the
   account again by email.
-- *Detach for good*: unlink AND either enable email MFA on the account (MFA accounts are never linked by an
-  Okta email) or unassign the person from the Okta application - otherwise the next sign-in re-links it.
+- *Detach for good*: FIRST enable email MFA on the account (MFA accounts are never linked by an Okta email)
+  or unassign the person from the Okta application, THEN unlink - otherwise the next sign-in re-links it.
+  A passwordless administrator or MFA-enabled account cannot be unlinked until it has a password (`409`:
+  such accounts never re-link by email, so the unlink would lock them out); set one first.
 - *Re-admit an identity blocked by deleting its user*: find the refused attempt's `login.sso_failure` event
   (`reason=account_deleted`, it carries `userId`) in the server log, then
   `curl -X DELETE -H "Authorization: Bearer <admin access token>" https://<host>/api/v1/users/<userId>/sso`
