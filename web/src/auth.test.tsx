@@ -76,21 +76,23 @@ describe("route guards", () => {
     expect(consumeSignedOut()).toBe(false);
   });
 
-  test("the persisted signed-out flag survives a reload, is read and removed once", () => {
-    persistSignedOutFlag();
-    // A fresh page load has no in-memory flag; the sessionStorage one stands in for it.
+  test("a flag persisted by an earlier page is read and removed once", () => {
+    // The page that left for the provider wrote its own mark; this document's differs.
+    sessionStorage.setItem("toadie.signedOut", "an-earlier-page");
     expect(consumeSignedOut()).toBe(true);
     expect(sessionStorage.getItem("toadie.signedOut")).toBeNull();
     expect(consumeSignedOut()).toBe(false);
   });
 
-  test("an in-memory flag is consumed without eating the persisted one the returning page needs", () => {
+  test("the leaving page never eats the flag it persisted for the returning one", () => {
     flagSignedOut();
     persistSignedOutFlag();
-    expect(consumeSignedOut()).toBe(true);
-    expect(sessionStorage.getItem("toadie.signedOut")).not.toBeNull();
+    // The SPA's own redirect to /login may render Login more than once before the page unloads.
     expect(consumeSignedOut()).toBe(true);
     expect(consumeSignedOut()).toBe(false);
+    expect(consumeSignedOut()).toBe(false);
+    expect(sessionStorage.getItem("toadie.signedOut")).not.toBeNull();
+    sessionStorage.removeItem("toadie.signedOut");
   });
 
   test("blocked storage reads as no flag and never throws", () => {

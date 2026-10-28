@@ -74,19 +74,23 @@ export function flagSignedOut(): void {
   pendingSignedOutBanner = true;
 }
 
+/** This document's own mark: a stored flag carrying it was written by the page that is about to leave. */
+const THIS_PAGE = Array.from(crypto.getRandomValues(new Uint32Array(2)), (n) => n.toString(36)).join("-");
+
 /** Carries the flag across a top-level navigation away from the SPA; blocked storage just loses the banner. */
 export function persistSignedOutFlag(): void {
   try {
-    sessionStorage.setItem(SIGNED_OUT_KEY, "1");
+    sessionStorage.setItem(SIGNED_OUT_KEY, THIS_PAGE);
   } catch {
     // Storage blocked: the sign-out still happened, only the banner is lost.
   }
 }
 
 /**
- * One-shot read of the signed-out banner flag. A pending in-memory flag wins and leaves the stored
- * one alone: the SPA's own redirect to /login can render before a navigation to the provider
- * unloads the page, and that transient Login must not eat the flag the returning page needs.
+ * One-shot read of the signed-out banner flag. The in-memory flag is this page's own; the stored
+ * one belongs to the NEXT document. The SPA's redirect to /login renders (possibly more than once)
+ * before the navigation to the provider unloads the page, so a stored flag this same page wrote is
+ * never consumed here — only the page the provider returns to reads and removes it.
  */
 export function consumeSignedOut(): boolean {
   if (pendingSignedOutBanner) {
@@ -94,9 +98,10 @@ export function consumeSignedOut(): boolean {
     return true;
   }
   try {
-    const stored = sessionStorage.getItem(SIGNED_OUT_KEY) !== null;
+    const stored = sessionStorage.getItem(SIGNED_OUT_KEY);
+    if (stored === null || stored === THIS_PAGE) return false;
     sessionStorage.removeItem(SIGNED_OUT_KEY);
-    return stored;
+    return true;
   } catch {
     return false;
   }

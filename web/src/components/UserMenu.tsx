@@ -87,11 +87,9 @@ export default function UserMenu() {
     // returns to /login, where the persisted flag shows the banner). Never stored or logged: it
     // carries the ID token.
     if (endSessionUrl === null) navigate("/login", { replace: true });
+    else persistSignedOutFlag();
     notifyAuthChange();
-    if (endSessionUrl !== null) {
-      persistSignedOutFlag();
-      window.location.assign(endSessionUrl);
-    }
+    if (endSessionUrl !== null) window.location.assign(endSessionUrl);
   }
 
   return (
