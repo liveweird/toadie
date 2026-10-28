@@ -1,8 +1,9 @@
 package ch.nokillswit.auth
 
+import ch.nokillswit.infra.concurrency.BoundedTtlStore
+import ch.nokillswit.infra.concurrency.WhenFull
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * In-memory store of pending email-MFA challenges (Lettuce's, ported): a login with correct
@@ -16,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap
  * in again. Multiple live challenges per account (repeated logins) are accepted up to one
  * global hard ceiling: the short TTL, attempt cap, login rate bucket, and atomic admission
  * bound the guessing and memory surfaces (≤ maxAttempts·10⁻⁶ per admitted challenge).
+ * A policy over [BoundedTtlStore]: this class owns id and code generation, the expiry and
+ * attempt verdicts and the audit reasons; the store owns the map, the lock and the sweep.
  */
 class MfaChallenges(
     private val ttlMillis: Long,
@@ -42,60 +45,25 @@ class MfaChallenges(
         val attempts: Int,
     )
 
-    private val challenges = ConcurrentHashMap<String, Challenge>()
-    private val admissionLock = Any()
+    private val challenges = BoundedTtlStore<String, Challenge>(maxTracked, WhenFull.REFUSE, clock, Challenge::expiresAt)
 
     fun issue(userId: UInt, authVersion: Long = 0): IssuedChallenge {
-        synchronized(admissionLock) {
-            pruneExpired()
-            if (challenges.size >= maxTracked) throw CapacityExceededException()
-            var id: String
-            do {
-                id = generateChallengeId()
-            } while (challenges.containsKey(id))
-            val code = generateMfaCode()
-            val expiresAt = clock() + ttlMillis
-            challenges[id] = Challenge(userId, authVersion, code, expiresAt, attempts = 0)
-            return IssuedChallenge(id, code, expiresAt)
-        }
+        val challenge = Challenge(userId, authVersion, generateMfaCode(), clock() + ttlMillis, attempts = 0)
+        val id = challenges.issue(challenge) { generateChallengeId() } ?: throw CapacityExceededException()
+        return IssuedChallenge(id, challenge.code, challenge.expiresAt)
     }
 
-    fun verify(challengeId: String, code: String): Outcome = synchronized(admissionLock) {
-        val challenge = challenges[challengeId]
-            ?: return@synchronized Outcome.Failure("unknown_challenge")
-        if (challenge.expiresAt <= clock()) {
-            challenges.remove(challengeId, challenge)
-            return@synchronized Outcome.Failure("expired")
+    // One atomic read-modify-write: single-use (a correct code removes the entry), the attempt bump (parallel wrong
+    // guesses can never lose an increment and sneak past the cap) and the expiry verdict all happen under the store's lock.
+    fun verify(challengeId: String, code: String): Outcome = challenges.update<Outcome>(challengeId) { c ->
+        when {
+            c == null -> null to Outcome.Failure("unknown_challenge")
+            c.expiresAt <= clock() -> null to Outcome.Failure("expired")
+            MessageDigest.isEqual(c.code.toByteArray(), code.toByteArray()) ->
+                null to Outcome.Success(c.userId, c.authVersion)
+            c.attempts + 1 >= maxAttempts -> null to Outcome.Failure("too_many_attempts")
+            else -> c.copy(attempts = c.attempts + 1) to Outcome.Failure("wrong_code")
         }
-        if (MessageDigest.isEqual(challenge.code.toByteArray(), code.toByteArray())) {
-            // Single-use is a CAS, not a courtesy: only the submission that actually removes
-            // the entry wins — a concurrent duplicate with the same correct code loses.
-            return@synchronized if (challenges.remove(challengeId, challenge)) {
-                Outcome.Success(challenge.userId, challenge.authVersion)
-            } else {
-                Outcome.Failure("unknown_challenge")
-            }
-        }
-        // The attempt bump is atomic (computeIfPresent) so parallel wrong guesses can never
-        // lose an increment and sneak past the cap; reaching the cap drops the entry.
-        var capped = false
-        challenges.computeIfPresent(challengeId) { _, current ->
-            val attempts = current.attempts + 1
-            if (attempts >= maxAttempts) {
-                capped = true
-                null
-            } else {
-                current.copy(attempts = attempts)
-            }
-        }
-        Outcome.Failure(if (capped) "too_many_attempts" else "wrong_code")
-    }
-
-    // Admission is serialized: expiry cleanup, the capacity decision, and insertion form one
-    // atomic operation, so concurrent correct-password logins cannot overshoot the live cap.
-    private fun pruneExpired() {
-        val now = clock()
-        challenges.entries.removeIf { it.value.expiresAt <= now }
     }
 
     private companion object {
