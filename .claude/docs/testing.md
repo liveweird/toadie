@@ -521,7 +521,17 @@ draw the prepaid estimate down without moving the shared total (and only the exc
 estimates summing beyond capacity admit exactly the reads that fit and refuse the rest up front,
 16 concurrent admissions on Dispatchers.Default admit exactly capacity / estimate (no timing —
 every admitted reservation is held until each attempt has returned), `peak` tracks the highest
-in-flight total without shrinking, and a non-positive charge is a no-op. `EntityQueryRouteTest`
+in-flight total without shrinking, and a non-positive charge is a no-op. `BoundedTtlStoreTest` is the
+pure suite of the bounded TTL primitive (`infra/concurrency/BoundedTtlStore.kt`, injected clock, no
+database): `admit` reports `ADMITTED` then `DUPLICATE` and re-admits a key after expiry, `REFUSE` at
+capacity answers `FULL`/null with live entries untouched and expiry reopening admission (the sweep
+precedes the capacity decision), `EVICT_OLDEST` never refuses, drops the eldest live entry and never
+evicts for a duplicate, `issue` regenerates a colliding key, `update` is an atomic read-modify-write
+(absent sees null and inserts nothing, null removes, a replacement for an absent key is an
+`IllegalStateException`) that sees expired entries, `remove` hands a value out once even when expired,
+and latch-synchronized contenders pin the ceiling (32 issues into capacity 7 keep exactly 7),
+single-use (32 removes, one winner), no lost increment (64 updates) and the evicting store settling at
+exactly capacity. `EntityQueryRouteTest`
 adds route-level cases via `TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))`
 (the same private-service-injection idiom `queryService` already uses for the entity-query
 deadline/permit seams) — a 1-byte capacity trips on the raw `octet_length` of even a bare
