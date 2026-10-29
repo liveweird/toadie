@@ -138,8 +138,9 @@ export interface paths {
          *     response, the 6-digit `code` from the email. Challenges are single-use, expire after
          *     a short TTL (default 5 min, `MFA_CODE_TTL_SECONDS`), and allow a few attempts
          *     (default 5, `MFA_MAX_ATTEMPTS`); every failure mode — unknown challenge, expired,
-         *     wrong code, attempts exhausted, user gone — answers the uniform `401`. Rate-limited
-         *     per client IP.
+         *     wrong code, attempts exhausted, user gone — answers the uniform `401`. A value longer
+         *     than anything the server issues (`challengeId` over 32, `code` over 6 characters) is a
+         *     plain `400` that never reaches the challenge. Rate-limited per client IP.
          */
         post: operations["verifyMfa"];
         delete?: never;
@@ -244,8 +245,9 @@ export interface paths {
          *     into another browser is useless. Answers the ordinary `LoginResponse` (refresh, logout
          *     and revocation then work as for a password session; email MFA is not applied, the
          *     identity provider owns the second factor). Every failure (unknown, expired, replayed,
-         *     wrong browser, account changed or deleted since the callback) is the uniform `401`.
-         *     Never cached; rate-limited per client IP with the SSO bucket.
+         *     wrong browser, account changed or deleted since the callback) is the uniform `401`; a
+         *     code longer than any issued one (43 characters) is a plain `400` that never reaches the
+         *     hand-off. Never cached; rate-limited per client IP with the SSO bucket.
          */
         post: operations["exchangeSsoCode"];
         delete?: never;
