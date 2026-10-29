@@ -5,6 +5,11 @@ import ch.nokillswit.infra.concurrency.WhenFull
 import java.security.MessageDigest
 import java.security.SecureRandom
 
+private const val CHALLENGE_ID_BYTES = 16
+
+/** Every challenge id [MfaChallenges] issues is exactly this long (hex): `POST /login/mfa` refuses a longer one with a 400. */
+internal const val MAX_MFA_CHALLENGE_ID_LENGTH = CHALLENGE_ID_BYTES * 2
+
 /**
  * In-memory store of pending email-MFA challenges (Lettuce's, ported): a login with correct
  * credentials by an MFA-enabled user mints a challenge — an opaque id handed to the client
@@ -72,7 +77,7 @@ class MfaChallenges(
 
         /** 128 bits of opaque, unguessable challenge identity. */
         fun generateChallengeId(): String {
-            val bytes = ByteArray(16)
+            val bytes = ByteArray(CHALLENGE_ID_BYTES)
             secureRandom.nextBytes(bytes)
             return bytes.joinToString("") { "%02x".format(it) }
         }

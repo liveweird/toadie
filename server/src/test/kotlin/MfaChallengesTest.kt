@@ -1,5 +1,7 @@
 package ch.nokillswit
 
+import ch.nokillswit.auth.MAX_MFA_CHALLENGE_ID_LENGTH
+import ch.nokillswit.auth.MAX_MFA_CODE_LENGTH
 import ch.nokillswit.auth.MfaChallenges
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -83,6 +85,9 @@ class MfaChallengesTest {
         val b = s.issue(1u)
         assertNotEquals(a.challengeId, b.challengeId)
         assertEquals(32, a.challengeId.length)
+        // The route's length bounds are exactly what this store issues (a longer value is refused before the lock).
+        assertEquals(MAX_MFA_CHALLENGE_ID_LENGTH, a.challengeId.length)
+        assertEquals(MAX_MFA_CODE_LENGTH, a.code.length)
         // Both stay independently verifiable (repeated logins may coexist within the TTL).
         assertIs<MfaChallenges.Outcome.Success>(s.verify(b.challengeId, b.code))
         assertIs<MfaChallenges.Outcome.Success>(s.verify(a.challengeId, a.code))
