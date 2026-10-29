@@ -19,8 +19,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.34.1",
     date: "2026-10-29",
-    en: `**Tighter sign-in input checks.** The email-code and Okta sign-in steps now refuse values longer than any code the server hands out, before doing any work with them. Signing in works exactly as before.`,
-    pl: `**Ściślejsza kontrola danych logowania.** Kroki logowania kodem z e-maila i przez Okta odrzucają teraz wartości dłuższe niż jakikolwiek kod wydawany przez serwer, zanim cokolwiek z nimi zrobią. Logowanie działa tak samo jak wcześniej.`,
+    en: `**Tighter sign-in input checks.** The email-code and Okta sign-in steps now refuse values longer than any code the server hands out, before doing any work with them. Signing in works exactly as before. The container image also moves to a rebuilt Java runtime base that carries the latest Ubuntu security fix (Brotli).`,
+    pl: `**Ściślejsza kontrola danych logowania.** Kroki logowania kodem z e-maila i przez Okta odrzucają teraz wartości dłuższe niż jakikolwiek kod wydawany przez serwer, zanim cokolwiek z nimi zrobią. Logowanie działa tak samo jak wcześniej. Obraz kontenera przechodzi też na przebudowany obraz bazowy środowiska Java z najnowszą poprawką bezpieczeństwa Ubuntu (Brotli).`,
   },
   {
     version: "2.34.0",

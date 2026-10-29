@@ -53,7 +53,7 @@ RUN ./gradlew :server:installDist --no-daemon
 # mise.toml/CI do not name 21.0.12.1 yet; the JDK, mise and CI follow with BACKLOG.md's "Align
 # Temurin with the 21.0.12.1 respin". When the scan goes red again, move to the newest clean base for
 # this update (a later respin tag), never a runtime-only jump to a later update, never an ignore file.
-FROM eclipse-temurin:21.0.12.1_1-jre@sha256:227118764cccd3c3294617061aaa93a08309c63a395eefa83e6b35032992ea99 AS runtime
+FROM eclipse-temurin:21.0.12.1_1-jre@sha256:f37956012e0cb88400e5b3689aeae2d2d735364c1922ae2225536163b5a99f56 AS runtime
 # Non-root runtime user: the base image's default user is root, and the application never
 # needs to bind a privileged port (8081) or write outside its own install directory. Created
 # BEFORE the COPYs so `--chown` sets ownership in the copy layers themselves — a trailing
