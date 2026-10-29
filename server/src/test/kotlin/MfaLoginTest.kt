@@ -234,6 +234,29 @@ class MfaLoginTest {
     }
 
     @Test
+    fun `values longer than anything the challenge store issues are 400 before reaching it`() = testApplication {
+        configureApp("security.mfa.maxAttempts" to "1")
+        startApplication()
+        val email = uniqueEmail("mfa-long")
+        seedMfaUser(email, "pw-123456789")
+        val mail = LogCapture("ch.nokillswit.mail")
+        val auditEvents = LogCapture("ch.nokillswit.audit")
+        try {
+            val client = jsonClient()
+            val challenge = client.login(email, "pw-123456789").body<MfaChallengeResponse>()
+            val code = mail.codeFor(email)
+            assertEquals(HttpStatusCode.BadRequest, client.verify("a".repeat(33), code).status)
+            // With a single allowed attempt, an over-long code that counted as a guess would kill the challenge.
+            assertEquals(HttpStatusCode.BadRequest, client.verify(challenge.challengeId, code + "0").status)
+            assertTrue(auditEvents.events.none { it.message == "login.mfa_failure" }, "the 400s never reached the store")
+            assertEquals(HttpStatusCode.OK, client.verify(challenge.challengeId, code).status)
+        } finally {
+            mail.detach()
+            auditEvents.detach()
+        }
+    }
+
+    @Test
     fun `an expired challenge answers the same uniform 401`() = testApplication {
         // TTL 0: the challenge is born expired — no sleeping in tests.
         configureApp("security.mfa.codeTtlSeconds" to "0")

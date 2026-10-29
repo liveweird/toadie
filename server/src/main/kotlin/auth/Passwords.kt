@@ -61,6 +61,9 @@ internal const val TIMING_EQUALIZER_HASH = "\$2a\$12\$x7ALsPyiaDt.5FQcrfQSlOmsT7
 
 private val secureRandom = SecureRandom()
 
+/** The emailed code's length; `POST /login/mfa` refuses a longer one with a 400. */
+internal const val MAX_MFA_CODE_LENGTH = 6
+
 /** The 6-digit email-MFA code (leading zeros kept) — guess-resistance comes from the challenge
  *  attempt cap, not the code length (see auth/MfaChallenges.kt). */
 internal fun generateMfaCode(): String = "%06d".format(secureRandom.nextInt(1_000_000))

@@ -14,6 +14,7 @@ import ch.nokillswit.users.UserServiceKey
 import io.ktor.http.Cookie
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.path
@@ -166,6 +167,10 @@ fun Application.configureSso() {
             }
             post(SSO_EXCHANGE_PATH) {
                 val req = call.receive<SsoExchangeRequest>()
+                // Every issued code is exactly this long: a longer one is a plain 400 before it reaches the hand-off store's lock.
+                if (req.code.length > MAX_SSO_HANDOFF_CODE_LENGTH) {
+                    throw BadRequestException("code must be at most $MAX_SSO_HANDOFF_CODE_LENGTH characters")
+                }
                 fun reject(): Nothing {
                     audit("login.sso_failure", "reason" to "handoff_invalid")
                     // Uniform for every cause: unknown, expired, replayed, wrong browser, account changed.

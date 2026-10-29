@@ -6,6 +6,11 @@ import ch.nokillswit.infra.concurrency.WhenFull
 import java.security.SecureRandom
 import java.util.Base64
 
+private const val CODE_BYTES = 32
+
+/** Every hand-off code is exactly this long (32 bytes, unpadded base64url): the exchange refuses a longer one with a 400. */
+internal const val MAX_SSO_HANDOFF_CODE_LENGTH = (CODE_BYTES * 4 + 2) / 3
+
 /**
  * In-memory, single-use hand-off between the SSO callback and `POST /login/sso/exchange` (the `MfaChallenges` shape):
  * after the IdP has authenticated the user and the account is resolved, the callback stores `{userId, authVersion,
@@ -61,7 +66,6 @@ class SsoHandoffs(
     private companion object {
         const val DEFAULT_TTL_MILLIS = 60_000L
         const val MAX_TRACKED = 10_000
-        const val CODE_BYTES = 32
         val secureRandom = SecureRandom()
 
         /** 256 bits of opaque identity, base64url (fragment- and URL-safe). */

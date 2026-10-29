@@ -31,16 +31,6 @@ promotes it. A finished item is removed, not ticked.
   schedule and retention against those targets. The 10 GiB initial claim and isolated restore
   drill are already implemented; the procedure is in [k8s/BACKUP-RESTORE.md](k8s/BACKUP-RESTORE.md).
 
-## Authentication
-
-- [new] **Bound the unauthenticated MFA and SSO-exchange fields.** `MfaVerifyRequest`
-  (`challengeId`, `code`) and `SsoExchangeRequest.code` declare no `maxLength` in the OpenAPI
-  contract and have no route-side length check, so a ~10 MiB value is encoded and hashed while the
-  store's lock is held (bounded by the `mfa`/`sso` buckets; unchanged by the 2.32.5 store refactor,
-  found by its security audit). Declare `maxLength` (32 / 6 / 43), reject longer values with a
-  route-side 400 per `.claude/docs/security.md` "Request payload validation", regenerate
-  `web/src/api/schema.ts`.
-
 ## Scaling constraint
 
 - [new] **Remove instance-local state before allowing multiple app replicas.** Every one of these

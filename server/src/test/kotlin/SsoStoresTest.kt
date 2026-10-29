@@ -1,5 +1,6 @@
 package ch.nokillswit
 
+import ch.nokillswit.auth.sso.MAX_SSO_HANDOFF_CODE_LENGTH
 import ch.nokillswit.auth.sso.SsoAccountRefusedException
 import ch.nokillswit.auth.sso.SsoAccounts
 import ch.nokillswit.auth.sso.SsoHandoffs
@@ -71,6 +72,7 @@ class SsoStoresTest {
         val handoffs = SsoHandoffs(ttlMillis = 60_000, clock = { now })
         val bind = byteArrayOf(1, 2, 3)
         val code = handoffs.issue(7u, 3, bind, SsoOutcome.LINKED)
+        assertEquals(MAX_SSO_HANDOFF_CODE_LENGTH, code.length, "the exchange's length bound is exactly the issued length")
         val got = assertNotNull(handoffs.consume(code))
         assertEquals(7u, got.userId)
         assertEquals(3L, got.authVersion)

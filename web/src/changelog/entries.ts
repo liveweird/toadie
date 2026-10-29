@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.34.1",
+    date: "2026-10-29",
+    en: `**Tighter sign-in input checks.** The email-code and Okta sign-in steps now refuse values longer than any code the server hands out, before doing any work with them. Signing in works exactly as before.`,
+    pl: `**Ściślejsza kontrola danych logowania.** Kroki logowania kodem z e-maila i przez Okta odrzucają teraz wartości dłuższe niż jakikolwiek kod wydawany przez serwer, zanim cokolwiek z nimi zrobią. Logowanie działa tak samo jak wcześniej.`,
+  },
+  {
     version: "2.34.0",
     date: "2026-10-28",
     en: `**Signing out ends the Okta session too.** After an Okta sign-in, Sign out also signs you out of Okta, so the next "Sign in with Okta" asks who you are instead of letting you straight back in. Password sign-ins are unchanged. Operators register the app's sign-in page as a sign-out redirect URI in Okta.`,

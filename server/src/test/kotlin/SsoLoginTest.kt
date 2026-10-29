@@ -623,6 +623,22 @@ class SsoLoginTest {
     }
 
     @Test
+    fun `an exchange code longer than any issued one is 400 before reaching the hand-off store`() = testApplication {
+        StubIdp().use { stub ->
+            ssoApp(stub)
+            val browser = browser()
+            withAuditCapture { audit ->
+                val signIn = browser.signIn(stub)
+                val code = assertNotNull(signIn.code)
+                assertEquals(HttpStatusCode.BadRequest, browser.exchange("a".repeat(44), signIn.attempt.cookie).status)
+                assertTrue(audit.events.none { it.message == "login.sso_failure" }, "a malformed code is no sign-in failure")
+                // The 400 touched neither the attempt cookie nor the hand-off: the real code still redeems.
+                assertEquals(HttpStatusCode.OK, browser.exchange(code, signIn.attempt.cookie).status)
+            }
+        }
+    }
+
+    @Test
     fun `the development attempt cookie is plain-named, Path slash, HttpOnly Lax, and every SSO answer is no-store`() = testApplication {
         StubIdp().use { stub ->
             ssoApp(stub)

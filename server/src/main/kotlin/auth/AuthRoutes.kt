@@ -330,6 +330,14 @@ fun Application.configureAuthRoutes() {
             // no token yet.
             post("/api/v1/login/mfa") {
                 val req = call.receive<MfaVerifyRequest>()
+                // Nothing this endpoint issued is longer, so an over-long value is a plain 400 before it reaches the
+                // challenge store's lock (the formats are public — there is nothing to enumerate).
+                if (req.challengeId.length > MAX_MFA_CHALLENGE_ID_LENGTH) {
+                    throw BadRequestException("challengeId must be at most $MAX_MFA_CHALLENGE_ID_LENGTH characters")
+                }
+                if (req.code.length > MAX_MFA_CODE_LENGTH) {
+                    throw BadRequestException("code must be at most $MAX_MFA_CODE_LENGTH characters")
+                }
                 when (val outcome = mfaChallenges.verify(req.challengeId, req.code)) {
                     is MfaChallenges.Outcome.Failure -> {
                         audit("login.mfa_failure", "reason" to outcome.reason)
