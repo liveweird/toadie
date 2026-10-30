@@ -29,11 +29,22 @@ const fixupCliPath = resolve(repoRoot, ".github/scripts/dependabot-gradle-fixup.
 // "gradle.lockfile" hide inside "settings-gradle.lockfile".
 const tokens = (text) => new Set(text.split(/\s+/).map((token) => token.replace(/^["']|["']$/g, "")));
 
-// A runtime tag follows the toolchain tag ("21.0.12_8") when it is the same feature/update line,
-// optionally as a respin ("21.0.12.N_M"); a different update (21.0.13_9) must fail.
+// A runtime tag follows the toolchain tag ("21.0.12_8" or the respin "21.0.12.1_1") when it is the
+// same feature/update line, optionally as a respin ("21.0.12.N_M"); a different update (21.0.13_9)
+// must fail.
 function runtimeFollowsToolchain(runtimeTag, toolchainTag) {
-  const base = toolchainTag.split("_")[0];
+  const base = toolchainTag.split("_")[0].split(".").slice(0, 3).join(".");
   return new RegExp(`^${base.replaceAll(".", "\\.")}(\\.\\d+)?_\\d+$`).test(runtimeTag);
+}
+
+// mise.toml spells Temurin builds as Adoptium semver ("21.0.11+10.0.LTS"); Docker Hub's
+// eclipse-temurin tags spell the same build "21.0.11_10" (underscore, LTS suffix dropped). A
+// respin is semver build patch*100+build: "21.0.12+101.0.LTS" is 21.0.12.1+1, tag "21.0.12.1_1".
+function dockerTagOf(miseVersion) {
+  const [, update, build] = miseVersion.match(/^(\d+\.\d+\.\d+)\+(\d+)\.\d+\.LTS$/) ?? [];
+  if (!update) throw new Error(`unrecognised Temurin version ${miseVersion}`);
+  const number = Number(build);
+  return number >= 100 ? `${update}.${Math.floor(number / 100)}_${number % 100}` : `${update}_${number}`;
 }
 
 describe("deployment and verification safety defaults", () => {
@@ -265,9 +276,7 @@ describe("deployment and verification safety defaults", () => {
   it("pins the Temurin build stage to the local toolchain's exact patch and the runtime to the same update", () => {
     const localVersion = toolchainSource.match(/^java = "temurin-([^"]+)"$/m)?.[1];
     expect(localVersion).toBeTruthy();
-    // mise.toml spells "21.0.11+10.0.LTS"; Docker Hub's eclipse-temurin tags spell the same
-    // build as "21.0.11_10" (underscore, LTS suffix dropped) — reduce both to that form.
-    const dockerTag = localVersion.replace("+", "_").replace(/\.\d+\.LTS$/, "");
+    const dockerTag = dockerTagOf(localVersion);
     const tags = (kind) => [...dockerfileSource.matchAll(new RegExp(`eclipse-temurin:(\\S+?)-${kind}(?:@sha256:[0-9a-f]{64})?\\b`, "g"))].map((m) => m[1]);
     // The build JDK must match mise/CI exactly; the runtime JRE may run a respin ahead (below).
     expect(tags("jdk")).toEqual([dockerTag]);
@@ -284,6 +293,17 @@ describe("deployment and verification safety defaults", () => {
     expect(runtimeFollowsToolchain("21.0.120_8", "21.0.12_8")).toBe(false);
     expect(runtimeFollowsToolchain("17.0.12_8", "21.0.12_8")).toBe(false);
     expect(runtimeFollowsToolchain("21.0.12.1", "21.0.12_8")).toBe(false);
+    expect(runtimeFollowsToolchain("21.0.12.1_1", "21.0.12.1_1")).toBe(true);
+    expect(runtimeFollowsToolchain("21.0.12.2_1", "21.0.12.1_1")).toBe(true);
+    expect(runtimeFollowsToolchain("21.0.13_9", "21.0.12.1_1")).toBe(false);
+  });
+
+  it("maps Adoptium semver, respins included, to the Docker Hub tag", () => {
+    expect(dockerTagOf("21.0.11+10.0.LTS")).toBe("21.0.11_10");
+    expect(dockerTagOf("21.0.12+8.0.LTS")).toBe("21.0.12_8");
+    expect(dockerTagOf("21.0.12+101.0.LTS")).toBe("21.0.12.1_1");
+    expect(dockerTagOf("21.0.12+203.0.LTS")).toBe("21.0.12.2_3");
+    expect(() => dockerTagOf("21.0.12+8")).toThrow();
   });
 
   it("pins every Dockerfile base image by sha256 digest", () => {

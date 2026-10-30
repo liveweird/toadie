@@ -52,12 +52,6 @@ promotes it. A finished item is removed, not ticked.
 
 ## Housekeeping
 
-- [new] **Align Temurin with the `21.0.12.1` respin.** The runtime JRE already runs
-  `eclipse-temurin:21.0.12.1_1-jre` (its image is the one the OS-layer scan passes), while the build
-  JDK, `mise.toml` and CI's `setup-java` stay on `21.0.12+8`: `infrastructure.test.js` requires the
-  JDK stage to equal mise exactly and lets the runtime run a same-update respin ahead. mise does not
-  list `21.0.12.1` yet, so a Dependabot bump of the JDK stage to the respin goes red on that parity
-  test (intended). When mise lists the build, move `mise.toml`, `ci.yml` and the JDK stage together.
 - [new] **Re-check the MCP transport facts on the first MCP Kotlin SDK bump.** The SDK is pinned
   at 0.15.0; `integration/Mcp.kt` relies on its stateless mode needing no `initialize`, on the
   Accept-header pair and on unknown tools being tool results. Re-verify those with the real

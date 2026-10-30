@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.34.2",
+    date: "2026-10-30",
+    en: `**One Java build throughout.** Toadie now builds, tests and runs its server on the same Temurin 21.0.12.1 Java build; until now only the runtime image used it. Nothing changes in how Toadie looks or behaves.`,
+    pl: `**Jedno wydanie Javy od budowania po uruchomienie.** Toadie kompiluje, testuje i uruchamia serwer na tym samym wydaniu Javy Temurin 21.0.12.1; dotąd korzystał z niego tylko obraz uruchomieniowy. Wygląd i działanie Toadie się nie zmieniają.`,
+  },
+  {
     version: "2.34.1",
     date: "2026-10-29",
     en: `**Tighter sign-in input checks.** The email-code and Okta sign-in steps now refuse values longer than any code the server hands out, before doing any work with them. Signing in works exactly as before. The container image also moves to a rebuilt Java runtime base that carries the latest Ubuntu security fix (Brotli).`,

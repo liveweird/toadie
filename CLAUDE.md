@@ -107,7 +107,7 @@ reveal control's `aria-pressed=true` state before reading the code block. PR #6'
 trace showed a completed click followed by capture of the mask and a correct login 401;
 the shared helper's suppressed-click regression prevents this without changing authentication.
 
-CI uses the complete Temurin version from `mise.toml` (`21.0.12+8.0.LTS`); keep the build/LTS suffix. `setup-java` cannot resolve the truncated `21.0.12+8` selector. The infrastructure regression suite pins CI/local version parity.
+CI uses the complete Temurin version from `mise.toml` (`21.0.12+101.0.LTS`, Adoptium's semver for the `21.0.12.1+1` respin); keep the build/LTS suffix. `setup-java` cannot resolve a truncated `21.0.12+101` selector. The infrastructure regression suite pins CI/local version parity.
 
 `.github/workflows/ci.yml` runs on pushes, PRs, merge queues, and manual dispatch. Its **Quality gate** requires backend build/coverage (under strict dependency verification), frontend build/lint/knip/coverage + Spectral/schema-drift checks, the Gradle advisory scan (Trivy over the committed lockfiles, HIGH/CRITICAL fail), the container image build (amd64+arm64) and its OS-layer scan (Trivy over the amd64 image, fixed HIGH/CRITICAL fail), and the reusable E2E workflow to succeed. **Quality gate** is required in the current GitHub ruleset; YAML alone cannot enforce merges. E2E owns a disposable `toadie-ci` Compose project on a fresh hosted runner, collects diagnostics, and removes only that project's volume even after setup failures. Local `npm test` preserves the development database. CI fails flaky browser tests and missing Mailpit. See `.claude/docs/testing.md` and `e2e/README.md` for verification details; `BACKLOG.md` is the single current backlog.
 

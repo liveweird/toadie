@@ -46,7 +46,7 @@ jobs:
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: '21.0.12+8.0.LTS'
+          java-version: '21.0.12+101.0.LTS'
       - name: Generate locks and checksums from an empty Gradle home
         run: GRADLE_USER_HOME="$RUNNER_TEMP/gradle-home-generate" ./gradlew --write-locks --write-verification-metadata sha256 build :server:koverXmlReport :server:installDist --no-daemon
       - name: Snapshot the generated files
