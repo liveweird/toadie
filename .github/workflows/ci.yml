@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: '21.0.12+8.0.LTS'
+          java-version: '21.0.12+101.0.LTS'
           cache: gradle
       # A force-pushed branch's push event names a before SHA that no ref reaches any more, so even a
       # full-history checkout lacks it: compare such a push against its merge-base with origin/master
