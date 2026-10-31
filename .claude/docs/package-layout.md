@@ -333,10 +333,11 @@ ch.nokillswit
 │                       handler), QueryAst.kt (the spanned AST), QueryLexer.kt + QueryParser.kt/
 │                       PatternParser.kt/ExpressionParser.kt (`parseEntityQuery` — hand-written
 │                       recursive descent, FIRST syntax error only, every out-of-subset Cypher
-│                       feature a fixed UNSUPPORTED message), QueryValidator.kt + Suggestions.kt
+│                       feature a fixed UNSUPPORTED message; `EXISTS { … }` blocks, 2.36.0), QueryValidator.kt + Suggestions.kt
 │                       (`validateEntityQuery` against `QuerySchema(blueprints, hierarchies)` —
 │                       EVERY finding, unknown names with a Levenshtein/prefix suggestion over
-│                       identifiers AND titles, the DISCONNECTED_PATTERN cartesian-product refusal),
+│                       identifiers AND titles, the DISCONNECTED_PATTERN cartesian-product refusal — an
+│                       uncorrelated EXISTS block is the same code, 2.36.0),
 │                       QueryValues.kt (Kleene three-valued comparisons over JsonElement, numbers
 │                       widened to Double, `candidateValue` shared with entities/AggregationQuery.kt
 │                       — ONE meta vocabulary), QueryGraph.kt (`InMemoryQueryGraph` over the
@@ -347,7 +348,8 @@ ch.nokillswit
 │                       query-only `$tier`/`$fillTier`/`r.$tier` metas: filled tables, lazy
 │                       `computeFillTier`, `EdgeRef`, `nodeValue`), QueryEvaluator.kt (`InMemoryQueryExecutor`
 │                       behind the `QueryExecutor` interface — anchored joins, level-set BFS for
-│                       `*n..m`, trailing OPTIONAL MATCH, RETURN as a node SET, LIMIT after dedupe).
+│                       `*n..m`, trailing OPTIONAL MATCH, RETURN as a node SET, LIMIT after dedupe; per-binding
+│                       correlated EXISTS blocks with AND/OR short-circuit, 2.36.0).
 │                       Pure — no database, no Ktor; consumed by entities/EntityGraphRead.kt (`EntityService.graph`)
 │                       (schema read → parse+validate OUTSIDE any transaction → workspace read →
 │                       a permit (4, `429` beyond) → decode+evaluate on the dedicated `entity-query` pool)

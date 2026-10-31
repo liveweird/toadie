@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Dataset consumption without a declared adoption",
+  "visibility": "PUBLIC",
+  "query": "MATCH (s:service)-[:consumes_datasets]->(d:dataset)\nWHERE NOT EXISTS { (s)<-[:consumer]-(:dataset_adoption)-[:dataset]->(d) }\nRETURN s, d"
+}

@@ -20,7 +20,10 @@ import ch.nokillswit.entityquery.QueryGraph
 import ch.nokillswit.entityquery.QueryResult
 import ch.nokillswit.entityquery.runEntityQuery
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -573,6 +576,276 @@ class QueryEvaluatorTest {
             setOf(k(SYSTEM_TEAM_BLUEPRINT, "platform"), k("service", "checkout"), k("cluster", "cluster-prod")),
             owning.keys(),
         )
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // EXISTS { pattern } — the correlated existential predicate (2.36.0)
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `EXISTS keeps a binding with a match and NOT EXISTS is the exact complement`() = runBlocking {
+        assertEquals(
+            setOf(k("service", "cart"), k("service", "gateway")),
+            run("MATCH (s:service) WHERE EXISTS { (s)-[:dependsOn]->(d) } RETURN s").keys(),
+        )
+        assertEquals(
+            setOf(k("service", "checkout"), k("service", "billing")),
+            run("MATCH (s:service) WHERE NOT EXISTS { (s)-[:dependsOn]->(d) } RETURN s").keys(),
+        )
+    }
+
+    @Test
+    fun `EXISTS after AND and inside parentheses`() = runBlocking {
+        assertEquals(
+            setOf(k("service", "gateway")),
+            run("MATCH (s:service) WHERE s.\$identifier = 'gateway' AND EXISTS { (s)-[:dependsOn]->(d) } RETURN s").keys(),
+        )
+        assertEquals(
+            setOf(k("service", "billing")),
+            run("MATCH (s:service) WHERE (NOT EXISTS { (s)-[:dependsOn]->(d) }) AND s.tier = '2' RETURN s").keys(),
+        )
+    }
+
+    @Test
+    fun `a chain block with two correlated ends and a block-local middle`() = runBlocking {
+        // gateway -dependsOn-> cart; gateway -shortcut-> checkout <-dependsOn- cart closes the chain.
+        val result = run(
+            "MATCH (g:service)-[:dependsOn]->(c:service) " +
+                "WHERE EXISTS { (g)-[:shortcut]->(t:service)<-[:dependsOn]-(c) } RETURN g, c",
+        )
+        assertEquals(setOf(k("service", "gateway"), k("service", "cart")), result.keys())
+    }
+
+    @Test
+    fun `the block's own WHERE filters its candidates`() = runBlocking {
+        val result = run(
+            "MATCH (s:service) WHERE EXISTS { (s)-[:cluster]->(c:cluster) WHERE c.\$identifier = 'cluster-staging' } RETURN s",
+        )
+        assertEquals(setOf(k("service", "billing")), result.keys())
+    }
+
+    @Test
+    fun `EXISTS is TRUE through a later candidate not the first`() = runBlocking {
+        // cluster-prod's incoming services are checkout, cart, gateway in that order.
+        val viaSecond = run(
+            "MATCH (c:cluster {\$identifier: 'cluster-prod'}) " +
+                "WHERE EXISTS { (c)<-[:cluster]-(s:service) WHERE s.\$identifier = 'cart' } RETURN c",
+        )
+        assertEquals(setOf(k("cluster", "cluster-prod")), viaSecond.keys())
+        val none = run(
+            "MATCH (c:cluster {\$identifier: 'cluster-prod'}) " +
+                "WHERE EXISTS { (c)<-[:cluster]-(s:service) WHERE s.\$identifier = 'nobody' } RETURN c",
+        )
+        assertEquals(emptySet(), none.keys())
+    }
+
+    @Test
+    fun `an UNKNOWN inner WHERE drops the candidate so the block is FALSE and NOT EXISTS is TRUE`() = runBlocking {
+        // checkout has priority 1; cart/gateway have none (UNKNOWN) — no candidate is TRUE.
+        val result = run(
+            "MATCH (c:cluster {\$identifier: 'cluster-prod'}) " +
+                "WHERE NOT EXISTS { (c)<-[:cluster]-(s:service) WHERE s.priority > 5 } RETURN c",
+        )
+        assertEquals(setOf(k("cluster", "cluster-prod")), result.keys())
+    }
+
+    @Test
+    fun `a null anchor from an unmatched OPTIONAL MATCH makes the block FALSE and NOT EXISTS TRUE`() = runBlocking {
+        val negative = "MATCH (t:_team {\$identifier: 'platform'}) " +
+            "OPTIONAL MATCH (t)<-[:\$team]-(s:service) WHERE s.\$identifier = 'nothing' " +
+            "OPTIONAL MATCH (t)<-[:\$team]-(u) WHERE NOT EXISTS { (s)-[:cluster]->(:cluster) } RETURN u"
+        assertEquals(
+            setOf(k("cluster", "cluster-prod"), k("service", "checkout"), k("workload", "checkout-workload")),
+            run(negative).keys(),
+        )
+        val positive = negative.replace("WHERE NOT EXISTS", "WHERE EXISTS")
+        assertEquals(emptySet(), run(positive).keys())
+    }
+
+    @Test
+    fun `a block in an OPTIONAL MATCH WHERE correlates on the optional's own variable`() = runBlocking {
+        val result = run(
+            "MATCH (t:_team {\$identifier: 'platform'}) OPTIONAL MATCH (t)<-[:\$team]-(s:service) " +
+                "WHERE EXISTS { (s)-[:cluster]->(c:cluster) WHERE c.\$identifier = 'cluster-prod' } RETURN s",
+        )
+        assertEquals(setOf(k("service", "checkout")), result.keys())
+    }
+
+    @Test
+    fun `dollar-team inside a block uses the effective team, Inherited included`() = runBlocking {
+        assertEquals(
+            setOf(k("service", "cart"), k("service", "gateway")),
+            run("MATCH (s:service) WHERE NOT EXISTS { (s)-[:\$team]->(:_team) } RETURN s").keys(),
+        )
+        assertEquals(
+            setOf(k("workload", "checkout-workload")),
+            run("MATCH (w:workload) WHERE EXISTS { (w)-[:\$team]->(t:_team) WHERE t.\$identifier = 'platform' } RETURN w").keys(),
+        )
+    }
+
+    @Test
+    fun `a hierarchy virtual edge inside a block resolves per source blueprint`() = runBlocking {
+        assertEquals(
+            setOf(k("workload", "checkout-workload")),
+            run("MATCH (w:workload) WHERE EXISTS { (w)-[:deployment]->(:cluster) } RETURN w").keys(),
+        )
+        assertEquals(
+            setOf(k("cluster", "cluster-prod"), k("cluster", "cluster-staging")),
+            run("MATCH (c:cluster) WHERE EXISTS { (c)-[:deployment]->(:environment) } RETURN c").keys(),
+        )
+    }
+
+    @Test
+    fun `a variable-length edge inside a block honours its hop range`() = runBlocking {
+        val deep = "MATCH (g:service {\$identifier: 'gateway'}) " +
+            "WHERE EXISTS { (g)-[:dependsOn*1..3]->(x:service {\$identifier: 'checkout'}) } RETURN g"
+        assertEquals(setOf(k("service", "gateway")), run(deep).keys())
+        assertEquals(emptySet(), run(deep.replace("*1..3", "*1..1")).keys())
+    }
+
+    @Test
+    fun `RETURN star never yields a block-local entity and the outer binding is untouched`() = runBlocking {
+        val result = run("MATCH (s:service)-[:cluster]->(c:cluster) WHERE EXISTS { (s)-[:dependsOn]->(d:service) } RETURN *")
+        assertEquals(
+            setOf(k("service", "cart"), k("service", "gateway"), k("cluster", "cluster-prod")),
+            result.keys(),
+        )
+    }
+
+    @Test
+    fun `a block-local name is free for a later clause to bind to a different row`() = runBlocking {
+        // The block's local `x` is cart (gateway dependsOn cart); the later clause binds `x` to checkout
+        // (gateway shortcut checkout). A leaked local would force the second clause to agree on cart.
+        val result = run(
+            "MATCH (g:service {\$identifier: 'gateway'}) WHERE EXISTS { (g)-[:dependsOn]->(x:service) } " +
+                "MATCH (g)-[:shortcut]->(x:service) RETURN x",
+        )
+        assertEquals(setOf(k("service", "checkout")), result.keys())
+    }
+
+    @Test
+    fun `a block stops at the first satisfying candidate wherever it sits in the order`() = runBlocking {
+        // cluster-prod's incoming services are checkout, cart, gateway — gateway is the LAST candidate.
+        val last = run(
+            "MATCH (c:cluster {\$identifier: 'cluster-prod'}) " +
+                "WHERE EXISTS { (c)<-[:cluster]-(s:service) WHERE s.\$identifier = 'gateway' } RETURN c",
+        )
+        assertEquals(setOf(k("cluster", "cluster-prod")), last.keys())
+    }
+
+    @Test
+    fun `a multi-pattern block needs one extension satisfying every pattern and the inner WHERE`() = runBlocking {
+        // billing's only cluster has no other service, so the second pattern's inner WHERE never holds.
+        val result = run(
+            "MATCH (s:service) WHERE EXISTS { (s)-[:cluster]->(c:cluster), (c)<-[:cluster]-(o:service) " +
+                "WHERE o.\$identifier = 'gateway' } RETURN s",
+        )
+        assertEquals(setOf(k("service", "checkout"), k("service", "cart"), k("service", "gateway")), result.keys())
+        val negated = run(
+            "MATCH (s:service) WHERE NOT EXISTS { (s)-[:cluster]->(c:cluster), (c)<-[:cluster]-(o:service) " +
+                "WHERE o.\$identifier = 'gateway' } RETURN s",
+        )
+        assertEquals(setOf(k("service", "billing")), negated.keys())
+    }
+
+    // A hub linking 400 spokes, every spoke linking the same 400 spokes (a `many` relation): the
+    // two-hop block below would produce 160 000 rows, past MAX_QUERY_BINDINGS.
+    private fun hubGraph(): QueryGraph {
+        val spokeCount = 400
+        val nodeBp = GraphBlueprint(
+            "node",
+            "Node",
+            BlueprintDefinition(relations = mapOf("links" to relation("node", many = true))),
+            emptyMap(),
+            BlueprintTiers(),
+        )
+        val spokeIds = (0 until spokeCount).map { "spoke-$it" }
+        val links = kotlinx.serialization.json.JsonArray(spokeIds.map { JsonPrimitive(it) })
+        val rows = (listOf("hub") + spokeIds).map { id ->
+            row("node", id, document = doc(relations = buildJsonObject { put("links", links) }))
+        }
+        return InMemoryQueryGraph(rows, mapOf("node" to nodeBp), emptySet())
+    }
+
+    private val hubQuery =
+        "MATCH (h:node {\$identifier: 'hub'}) WHERE EXISTS { (h)-[:links]->(a)-[:links]->(b) WHERE b.\$identifier = 'none' } RETURN h"
+
+    @Test
+    fun `a block anchored on its right end expands to the left`() = runBlocking {
+        // Correlated only on `c` (the LAST node), so the walk anchors there and expands leftwards:
+        // b dependsOn a, and b is in cluster c — cart (dependsOn checkout) lives in cluster-prod only.
+        val block = "{ (a:service)<-[:dependsOn]-(b:service)-[:cluster]->(c) }"
+        assertEquals(
+            setOf(k("cluster", "cluster-prod")),
+            run("MATCH (c:cluster) WHERE EXISTS $block RETURN c").keys(),
+        )
+        assertEquals(
+            setOf(k("cluster", "cluster-staging")),
+            run("MATCH (c:cluster) WHERE NOT EXISTS $block RETURN c").keys(),
+        )
+    }
+
+    @Test
+    fun `a dead-end walk is refused with BINDING_LIMIT on its intermediate states, not by the deadline`() = runBlocking {
+        // 400 x 400 intermediate states, none of which survives the last node's inline map.
+        val text = "MATCH (h:node {\$identifier: 'hub'}) " +
+            "WHERE EXISTS { (h)-[:links]->(a)-[:links]->(b)-[:links]->(c {\$identifier: 'nope'}) } RETURN h"
+        val ex = assertFailsWith<QueryBudgetExceeded> { run(text, hubGraph()) }
+        assertEquals(QueryDiagnosticCodes.BINDING_LIMIT, ex.code)
+    }
+
+    @Test
+    fun `a block with a match returns TRUE without materialising its fan-out`() = runBlocking {
+        // 400 x 400 complete extensions exist, but the first one already answers TRUE — no BINDING_LIMIT.
+        val exists = "MATCH (h:node {\$identifier: 'hub'}) WHERE EXISTS { (h)-[:links]->(a)-[:links]->(b) } RETURN h"
+        assertEquals(setOf(k("node", "hub")), run(exists, hubGraph()).keys())
+        assertEquals(emptySet(), run(exists.replace("WHERE EXISTS", "WHERE NOT EXISTS"), hubGraph()).keys())
+        // A satisfying candidate deep in the order is still found before the cap.
+        val deep = "MATCH (h:node {\$identifier: 'hub'}) " +
+            "WHERE EXISTS { (h)-[:links]->(a)-[:links]->(b) WHERE b.\$identifier = 'spoke-399' } RETURN h"
+        assertEquals(setOf(k("node", "hub")), run(deep, hubGraph()).keys())
+    }
+
+    @Test
+    fun `a binding explosion inside a block is refused with BINDING_LIMIT`() = runBlocking {
+        val ex = assertFailsWith<QueryBudgetExceeded> { run(hubQuery, hubGraph()) }
+        assertEquals(QueryDiagnosticCodes.BINDING_LIMIT, ex.code)
+    }
+
+    @Test
+    fun `the deadline is honoured inside a block`() = runBlocking {
+        val text = "MATCH (c:cluster {\$identifier: 'cluster-prod'}) " +
+            "WHERE EXISTS { (c)<-[:cluster]-(s:service) WHERE s.\$identifier = 'none' } RETURN c"
+        // One millisecond per clock read, 5 ms budget: the anchor row and the WHERE take two
+        // checkpoints, the block's anchor and neighbours the next ones — the fifth read trips.
+        fun ticking(): QueryBudget {
+            var now = 0L
+            return QueryBudget(deadlineMillis = 5, nanoTime = { val v = now; now += 1_000_000L; v })
+        }
+        val ex = assertFailsWith<QueryBudgetExceeded> { runEntityQuery(text, graph(), ticking()) }
+        assertEquals(QueryDiagnosticCodes.DEADLINE_EXCEEDED, ex.code)
+        // The same clock does not trip a query with no block (one checkpoint in total).
+        assertEquals(1, runEntityQuery("MATCH (c:cluster {\$identifier: 'cluster-prod'}) RETURN c", graph(), ticking()).rows.size)
+    }
+
+    @Test
+    fun `caller cancellation propagates from inside a block`() = runBlocking {
+        val text = "MATCH (c:cluster {\$identifier: 'cluster-prod'}) " +
+            "WHERE EXISTS { (c)<-[:cluster]-(s:service) WHERE s.\$identifier = 'none' } RETURN c"
+        var reads = 0
+        lateinit var job: Deferred<QueryResult>
+        // Cancel the caller on the sixth clock read — inside the block's neighbour loop.
+        val budget = QueryBudget(
+            deadlineMillis = 60_000,
+            nanoTime = {
+                reads++
+                if (reads == 6) job.cancel()
+                0L
+            },
+        )
+        job = async(start = CoroutineStart.LAZY) { runEntityQuery(text, graph(), budget) }
+        assertFailsWith<CancellationException> { job.await() }
+        Unit
     }
 
     @Test

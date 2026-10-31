@@ -183,11 +183,22 @@ internal fun resolveOperand(operand: Operand, lookup: PropertyLookup): JsonEleme
  * current value): `And`/`Or`/`Not` are Kleene ([Truth.and]/[Truth.or]/[Truth.not]);
  * [Expr.IsNull] is always decidable — TRUE or FALSE, never UNKNOWN, unlike a comparison against
  * a possibly-absent value.
+ *
+ * [exists] (2.36.0) answers an [Expr.Exists] block for the SAME binding — the evaluator owns the
+ * graph walk, this pure module does not; it must return TRUE or FALSE, never UNKNOWN. `AND`/`OR`
+ * SHORT-CIRCUIT (a FALSE left side makes `AND` FALSE, a TRUE left side makes `OR` TRUE): identical
+ * to the Kleene tables, and it keeps a trailing block from running for a binding already decided.
  */
-internal fun evaluate(expr: Expr, lookup: PropertyLookup): Truth = when (expr) {
-    is Expr.And -> evaluate(expr.left, lookup) and evaluate(expr.right, lookup)
-    is Expr.Or -> evaluate(expr.left, lookup) or evaluate(expr.right, lookup)
-    is Expr.Not -> evaluate(expr.operand, lookup).not()
+internal suspend fun evaluate(expr: Expr, lookup: PropertyLookup, exists: suspend (Expr.Exists) -> Truth): Truth = when (expr) {
+    is Expr.And -> {
+        val left = evaluate(expr.left, lookup, exists)
+        if (left == Truth.FALSE) left else left and evaluate(expr.right, lookup, exists)
+    }
+    is Expr.Or -> {
+        val left = evaluate(expr.left, lookup, exists)
+        if (left == Truth.TRUE) left else left or evaluate(expr.right, lookup, exists)
+    }
+    is Expr.Not -> evaluate(expr.operand, lookup, exists).not()
     is Expr.Compare -> compare(expr.op, resolveOperand(expr.left, lookup), resolveOperand(expr.right, lookup))
     is Expr.In -> inList(resolveOperand(expr.left, lookup), resolveOperand(expr.right, lookup))
     is Expr.StringOp -> stringOp(expr.op, resolveOperand(expr.left, lookup), resolveOperand(expr.right, lookup))
@@ -196,4 +207,5 @@ internal fun evaluate(expr: Expr, lookup: PropertyLookup): Truth = when (expr) {
         boolTruth(if (expr.negated) !absent else absent)
     }
     is Expr.Truthy -> truthy(resolveOperand(expr.operand, lookup))
+    is Expr.Exists -> exists(expr)
 }

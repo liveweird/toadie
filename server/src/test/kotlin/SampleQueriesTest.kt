@@ -164,15 +164,30 @@ class SampleQueriesTest {
             "09-workloads-outside-cluster-environment.json" to setOf(
                 "workload/live-cart-gateway-test", "cluster/staging-k8s", "environment/staging", "environment/test",
             ),
+            "10-api-consumption-without-adoption.json" to setOf(
+                "service/checkout-service", "service/ledger-worker", "service/payments-gateway", "service/storefront-bff",
+                "service/storefront-web",
+                "api/acquirer-rest", "api/catalog-graphql", "api/live-cart", "api/order-events", "api/payments-grpc",
+            ),
+            "11-api-adoption-without-consumption.json" to setOf(
+                "api_adoption/checkout-service-acquirer-rest", "service/checkout-service", "api/acquirer-rest",
+            ),
+            "12-dataset-consumption-without-adoption.json" to setOf(
+                "service/legacy-invoicing", "service/settlement-pipeline", "service/storefront-web",
+                "dataset/orders", "dataset/payments-ledger", "dataset/settlements-daily",
+            ),
+            "13-dataset-adoption-without-consumption.json" to setOf(
+                "dataset_adoption/settlement-pipeline-orders", "service/settlement-pipeline", "dataset/orders",
+            ),
         )
 
 
         /** query file → node count per blueprint, over the 76 sample entities (recorded live, 2.20.x). */
         val EXPECTED_COUNTS: Map<String, Map<String, Int>> = linkedMapOf(
             "01-api-consumption.json" to mapOf("api" to 4, "api_adoption" to 4, "service" to 3),
-            "02-dataset-consumption.json" to mapOf("dataset" to 3, "dataset_adoption" to 3, "service" to 3),
+            "02-dataset-consumption.json" to mapOf("dataset" to 2, "dataset_adoption" to 3, "service" to 3),
             "03-adoptions-in-flight.json" to mapOf(
-                "api" to 2, "api_adoption" to 2, "dataset" to 2, "dataset_adoption" to 2, "service" to 4,
+                "api" to 2, "api_adoption" to 2, "dataset" to 1, "dataset_adoption" to 2, "service" to 4,
             ),
             "04-products-and-systems.json" to mapOf("product" to 5, "system" to 5),
             "05-dataset-ownership-lineage.json" to mapOf("_team" to 2, "dataset" to 5, "service" to 7),
@@ -180,6 +195,10 @@ class SampleQueriesTest {
             "07-dora-critical-functions.json" to mapOf("_team" to 2, "resource" to 3, "service" to 3, "system" to 1),
             "08-banking-outsourcing-scope.json" to mapOf("api" to 2, "dataset" to 2, "resource" to 3, "service" to 3, "system" to 2),
             "09-workloads-outside-cluster-environment.json" to mapOf("cluster" to 1, "environment" to 2, "workload" to 1),
+            "10-api-consumption-without-adoption.json" to mapOf("api" to 5, "service" to 5),
+            "11-api-adoption-without-consumption.json" to mapOf("api" to 1, "api_adoption" to 1, "service" to 1),
+            "12-dataset-consumption-without-adoption.json" to mapOf("dataset" to 3, "service" to 3),
+            "13-dataset-adoption-without-consumption.json" to mapOf("dataset" to 1, "dataset_adoption" to 1, "service" to 1),
         )
     }
 }

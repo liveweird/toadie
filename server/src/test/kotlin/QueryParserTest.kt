@@ -582,4 +582,155 @@ class QueryParserTest {
         val query = parseEntityQuery("MATCH (a) /* comment */ RETURN a")
         assertNotNull(query)
     }
+
+    // ---- EXISTS { pattern } (2.36.0) -----------------------------------------------------
+
+    private fun whereOf(text: String): Expr = assertNotNull(parseEntityQuery(text).matches.single().where)
+
+    private fun unsupportedMessage(text: String): String {
+        val diagnostic = assertFailsWith<QueryException>(text) { parseEntityQuery(text) }.diagnostics.single()
+        assertEquals(QueryDiagnosticCodes.UNSUPPORTED, diagnostic.code, text)
+        return diagnostic.message
+    }
+
+    @Test
+    fun `EXISTS with one pattern parses`() {
+        val exists = assertIs<Expr.Exists>(whereOf("MATCH (s) WHERE EXISTS { (s)-[:r]->(x) } RETURN s"))
+        assertEquals(1, exists.patterns.size)
+        assertEquals(listOf("s", "x"), exists.patterns.single().nodes.map { it.variable })
+        assertNull(exists.where)
+    }
+
+    @Test
+    fun `EXISTS accepts several comma-separated patterns and an inner WHERE`() {
+        val exists = assertIs<Expr.Exists>(
+            whereOf("MATCH (s) WHERE exists { (s)-->(x), (x)-[:q*1..3]-(y:t {k: 1}) WHERE y.k = 1 AND x.k <> 2 } RETURN s"),
+        )
+        assertEquals(2, exists.patterns.size)
+        assertIs<Expr.And>(exists.where)
+    }
+
+    @Test
+    fun `NOT EXISTS wraps the block and EXISTS composes with AND, OR and parentheses`() {
+        val not = assertIs<Expr.Not>(whereOf("MATCH (s) WHERE NOT EXISTS { (s)-->(x) } RETURN s"))
+        assertIs<Expr.Exists>(not.operand)
+        val and = assertIs<Expr.And>(whereOf("MATCH (s) WHERE s.a = 1 AND EXISTS { (s)-->(x) } RETURN s"))
+        assertIs<Expr.Exists>(and.right)
+        val grouped = assertIs<Expr.Or>(whereOf("MATCH (s) WHERE (EXISTS { (s)-->(x) } OR s.a = 1) OR NOT EXISTS { (s)<--(y) } RETURN s"))
+        assertIs<Expr.Or>(grouped.left)
+        assertIs<Expr.Not>(grouped.right)
+    }
+
+    @Test
+    fun `an EXISTS block in an OPTIONAL MATCH WHERE parses`() {
+        val query = parseEntityQuery("MATCH (s) OPTIONAL MATCH (s)-->(o) WHERE EXISTS { (o)-->(x) } RETURN s")
+        assertIs<Expr.Exists>(query.optionals.single().where)
+    }
+
+    @Test
+    fun `EXISTS inside EXISTS is unsupported`() {
+        assertEquals(
+            "EXISTS inside EXISTS is not supported",
+            unsupportedMessage("MATCH (s) WHERE EXISTS { (s)-->(x) WHERE EXISTS { (x)-->(y) } } RETURN s"),
+        )
+    }
+
+    @Test
+    fun `a relationship variable inside EXISTS is unsupported`() {
+        assertEquals(
+            "a relationship variable inside EXISTS is not supported — leave the relationship anonymous",
+            unsupportedMessage("MATCH (s) WHERE EXISTS { (s)-[r:x]->(y) } RETURN s"),
+        )
+        // The same edge body outside a block is still fine.
+        assertNotNull(parseEntityQuery("MATCH (s)-[r:x]->(y) RETURN s"))
+    }
+
+    @Test
+    fun `MATCH or OPTIONAL MATCH inside EXISTS is unsupported`() {
+        val message = "EXISTS { MATCH … } is not supported — write the pattern directly: EXISTS { (a)-[:r]->(b) }"
+        assertEquals(message, unsupportedMessage("MATCH (s) WHERE EXISTS { MATCH (s)-->(x) } RETURN s"))
+        assertEquals(message, unsupportedMessage("MATCH (s) WHERE EXISTS { OPTIONAL MATCH (s)-->(x) } RETURN s"))
+    }
+
+    @Test
+    fun `the exists function is unsupported`() {
+        assertEquals(
+            "the exists() function is not supported — use IS NOT NULL for a property, EXISTS { … } for a pattern",
+            unsupportedMessage("MATCH (s) WHERE exists(s.x) RETURN s"),
+        )
+    }
+
+    @Test
+    fun `a bare pattern predicate is unsupported in every lookahead shape`() {
+        val message = "a pattern predicate is not supported — wrap it as EXISTS { (a)-[:r]->(b) }"
+        val shapes = listOf("(:t)-->(x)", "()-->(x)", "(a:t)-->(x)", "(a {k: 1})-->(x)", "(a)-->(x)", "(a)<--(x)", "NOT (a)-[:r]->(x)")
+        for (shape in shapes) {
+            assertEquals(message, unsupportedMessage("MATCH (a) WHERE $shape RETURN a"), shape)
+        }
+    }
+
+    @Test
+    fun `a parenthesised expression is still grouping`() {
+        assertIs<Expr.Compare>(whereOf("MATCH (a) WHERE (a.x = 1) RETURN a"))
+        assertIs<Expr.Truthy>(whereOf("MATCH (a) WHERE (a.x) RETURN a"))
+        assertIs<Expr.Or>(whereOf("MATCH (a) WHERE (a.x = 1 OR a.y = 2) RETURN a"))
+    }
+
+    @Test
+    fun `EXISTS without a brace or a closing brace is a syntax error`() {
+        val noOpen = assertFailsWith<QueryException> { parseEntityQuery("MATCH (s) WHERE EXISTS (s)-->(x) RETURN s") }
+        // `EXISTS (` is the function message; anything else after EXISTS is the ordinary expectation.
+        assertEquals(QueryDiagnosticCodes.UNSUPPORTED, noOpen.diagnostics.single().code)
+        val noBrace = assertFailsWith<QueryException> { parseEntityQuery("MATCH (s) WHERE EXISTS s RETURN s") }
+        assertEquals(QueryDiagnosticCodes.SYNTAX, noBrace.diagnostics.single().code)
+        assertTrue(noBrace.diagnostics.single().message.startsWith("Expected '{'"))
+        val noClose = assertFailsWith<QueryException> { parseEntityQuery("MATCH (s) WHERE EXISTS { (s)-->(x) RETURN s") }
+        assertEquals(QueryDiagnosticCodes.SYNTAX, noClose.diagnostics.single().code)
+        assertTrue(noClose.diagnostics.single().message.startsWith("Expected '}'"))
+        val empty = assertFailsWith<QueryException> { parseEntityQuery("MATCH (s) WHERE EXISTS { } RETURN s") }
+        assertEquals(QueryDiagnosticCodes.SYNTAX, empty.diagnostics.single().code)
+    }
+
+    @Test
+    fun `the brace counts one nesting level - 63 enclosing parentheses parse, 64 do not`() {
+        fun nested(depth: Int) = (1..depth).fold("EXISTS { (a)-->(x) }") { acc, _ -> "($acc)" }
+        assertIs<Expr.Exists>(whereOf("MATCH (a) WHERE ${nested(63)} RETURN a"))
+        val ex = assertFailsWith<QueryException> { parseEntityQuery("MATCH (a) WHERE ${nested(64)} RETURN a") }
+        assertEquals(QueryDiagnosticCodes.SYNTAX, ex.diagnostics.single().code)
+        assertTrue(ex.diagnostics.single().message.contains("deeper than 64 levels"))
+    }
+
+    @Test
+    fun `the block's own WHERE shares the nesting budget`() {
+        fun inner(depth: Int) = (1..depth).fold("x.k") { acc, _ -> "($acc)" }
+        assertIs<Expr.Exists>(whereOf("MATCH (a) WHERE EXISTS { (a)-->(x) WHERE ${inner(63)} } RETURN a"))
+        val ex = assertFailsWith<QueryException> { parseEntityQuery("MATCH (a) WHERE EXISTS { (a)-->(x) WHERE ${inner(64)} } RETURN a") }
+        assertTrue(ex.diagnostics.single().message.contains("deeper than 64 levels"))
+    }
+
+    @Test
+    fun `the caps count a block's node patterns`() {
+        val block = (1..MAX_QUERY_NODE_PATTERNS).joinToString(", ") { "(a)-->(n$it)" }
+        val ex = assertFailsWith<QueryException> { parseEntityQuery("MATCH (a) WHERE EXISTS { $block } RETURN a") }
+        assertEquals(QueryDiagnosticCodes.TOO_MANY_PATTERNS, ex.diagnostics.single().code)
+    }
+
+    @Test
+    fun `the caps count a block's local variables`() {
+        // 16 node + 15 edge variables (31) outside the block, 20 node patterns in all — only the two
+        // block locals tip the VARIABLE count past 32.
+        val chain = (1..16).joinToString("") { i -> if (i == 1) "(v1)" else "-[e${i - 1}]-(v$i)" }
+        val text = "MATCH $chain WHERE EXISTS { (v1)-->(l1), (v1)-->(l2) } RETURN v1"
+        val ex = assertFailsWith<QueryException> { parseEntityQuery(text) }
+        assertEquals(QueryDiagnosticCodes.TOO_MANY_VARIABLES, ex.diagnostics.single().code)
+    }
+
+    @Test
+    fun `exists is reserved as a variable name but not as a label or property key`() {
+        val ex = assertFailsWith<QueryException> { parseEntityQuery("MATCH (exists) RETURN exists") }
+        assertEquals(QueryDiagnosticCodes.SYNTAX, ex.diagnostics.single().code)
+        assertNotNull(parseEntityQuery("MATCH (a:exists) WHERE a.exists = 1 RETURN a"))
+        assertNotNull(parseEntityQuery("MATCH (a)-[:exists]->(b) RETURN a"))
+        assertNotNull(parseEntityQuery("MATCH (a:`exists`) RETURN a"))
+    }
 }

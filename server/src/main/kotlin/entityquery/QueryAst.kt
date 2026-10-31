@@ -27,7 +27,10 @@ data class Query(
     val returns: Returns,
     val limit: Int?,
     val span: Span,
-)
+) {
+    /** Every pattern of every clause PLUS every `EXISTS { … }` block's patterns — what the caps count (2.36.0). */
+    fun allPatterns(): List<Pattern> = (matches + optionals).flatMap { it.allPatterns() }
+}
 
 /** One `MATCH` or `OPTIONAL MATCH` clause: comma-separated patterns plus an optional `WHERE`. */
 data class MatchClause(
@@ -35,7 +38,10 @@ data class MatchClause(
     val where: Expr?,
     val optional: Boolean,
     val span: Span,
-)
+) {
+    /** The clause's own patterns followed by the patterns of every `EXISTS { … }` block in its WHERE. */
+    fun allPatterns(): List<Pattern> = patterns + (where?.existsBlocks().orEmpty()).flatMap { it.patterns }
+}
 
 /** A chain `node (edge node)*` — [edges] has exactly `nodes.size - 1` entries. */
 data class Pattern(val nodes: List<NodePattern>, val edges: List<EdgePattern>, val span: Span)
@@ -74,7 +80,10 @@ sealed interface Returns {
     data class Variables(val names: List<String>, override val span: Span) : Returns
 }
 
-/** WHERE expressions. */
+/**
+ * WHERE expressions. `predicate := EXISTS '{' pattern (',' pattern)* whereClause? '}'
+ * | '(' expression ')' | operand comparison?` (the EXISTS alternative is 2.36.0).
+ */
 sealed interface Expr {
     val span: Span
 
@@ -98,6 +107,24 @@ sealed interface Expr {
 
     /** A bare operand as a predicate — TRUE only for JSON `true`. */
     data class Truthy(val operand: Operand, override val span: Span) : Expr
+
+    /**
+     * `EXISTS { pattern (, pattern)* (WHERE expr)? }` (2.36.0) — the correlated existential predicate:
+     * TRUE iff at least one binding of [patterns] (extending the current outer binding) survives [where].
+     */
+    data class Exists(val patterns: List<Pattern>, val where: Expr?, override val span: Span) : Expr
+}
+
+/**
+ * Every [Expr.Exists] block in this expression, walking `AND`/`OR`/`NOT` (and, defensively, a
+ * block's own WHERE — the parser refuses nesting).
+ */
+fun Expr.existsBlocks(): List<Expr.Exists> = when (this) {
+    is Expr.And -> left.existsBlocks() + right.existsBlocks()
+    is Expr.Or -> left.existsBlocks() + right.existsBlocks()
+    is Expr.Not -> operand.existsBlocks()
+    is Expr.Exists -> listOf(this) + where?.existsBlocks().orEmpty()
+    is Expr.Compare, is Expr.In, is Expr.StringOp, is Expr.IsNull, is Expr.Truthy -> emptyList()
 }
 
 enum class ComparisonOp { EQUAL, NOT_EQUAL, LESS, LESS_OR_EQUAL, GREATER, GREATER_OR_EQUAL }

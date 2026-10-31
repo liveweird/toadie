@@ -27,13 +27,14 @@
   },
   {
     "blueprint": "dataset_adoption",
-    "identifier": "settlement-pipeline-payments-ledger",
-    "title": "settlement-pipeline → payments-ledger (unknown contract)",
+    "identifier": "settlement-pipeline-orders",
+    "title": "settlement-pipeline → orders (unknown contract)",
     "properties": {
       "status": "retiring",
       "declared_by": "marek.nowak",
-      "verified_at": "2026-04-30T09:00:00Z"
+      "verified_at": "2026-04-30T09:00:00Z",
+      "notes": "Read orders directly before the ledger existed; retiring."
     },
-    "relations": { "consumer": "settlement-pipeline", "dataset": "payments-ledger", "environment": "production" }
+    "relations": { "consumer": "settlement-pipeline", "dataset": "orders", "environment": "production" }
   }
 ]

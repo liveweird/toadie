@@ -52,10 +52,7 @@ promotes it. A finished item is removed, not ticked.
 
 ## Ontology
 
-- [new] **Generic adoption/relation consistency check.** Report (Port Errors, report-only) an
-  api_adoption/dataset_adoption whose consumer's consumes_apis/consumes_datasets does not list the
-  adopted api/dataset, and the reverse; data-driven over the blueprint pair, never ontology names
-  (the 2.35.0 double-bookkeeping convention in .claude/docs/ontology.md).
+- [new] **Adoption/relation consistency as Errors-report rows.** 2.36.0 ships the check as four PUBLIC sample saved queries (NOT EXISTS over the consumes_* relation and the adoption pair, both directions). What remains is surfacing a saved query's non-empty result on Port Errors without naming the ontology — which means EVALUATING chosen saved queries inside the report, against its never-evaluates rule and the entity-query budget/permits. Decide the mechanism (a "check" flag on saved queries + a per-report evaluation cap) before promoting.
 
 ## Housekeeping
 
