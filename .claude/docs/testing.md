@@ -391,7 +391,7 @@ dictionary value used (a dictionary being one `(property, enum)` pair, so `lifec
 across service/library/api; the one exemption is `system.type`, a taxonomy wider than the
 five-system sample, for which a non-empty subset is enough — `PARTIAL_DICTIONARIES`), both `team` shapes, a multi-element relation array, an explicit
 `null` relation, and dependency-safe file numbering. `SampleQueriesTest` does the same for
-`sample-data/port/commerce-payments/queries/` (eight PUBLIC saved entity queries): over the loaded blueprints
+`sample-data/port/commerce-payments/queries/` (nine PUBLIC saved entity queries): over the loaded blueprints
 and the 76 entities it POSTs every file (`201`, then the `409` that `queries/load.sh` reports as "exists,
 skipped"), requires an empty `POST /entities/query/check`, and pins each query's per-blueprint node counts
 through `GET /entities/graph?query=` — a rename that strands a sample query fails here.

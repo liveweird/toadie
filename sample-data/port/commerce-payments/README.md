@@ -5,9 +5,9 @@ This standalone Port demo models a commerce and payments platform as two depende
 - [`blueprints/`](blueprints/) contains fifteen numbered blueprint definitions.
 - [`entities/`](entities/) contains fifteen numbered files with 76 entity instances.
 
-A third, optional set, [`queries/`](queries/), holds eight public saved entity queries that
+A third, optional set, [`queries/`](queries/), holds nine public saved entity queries that
 focus the Entity graph and Entity hierarchy canvases on the adoption, product, dataset and
-regulatory-flag models. It is loaded after the entities.
+regulatory-flag and deployment models. It is loaded after the entities.
 
 A fourth, optional file, [`mapping/backstage.json`](mapping/backstage.json), is the default
 [Backstage conversion mapping](#backstage-conversion-mapping): the data that says how these
@@ -167,6 +167,7 @@ the Entity graph and Entity hierarchy pages; picking one runs it. Their names st
 | PCI-DSS services and what they touch | services with `pci_dss: true`, their system, and everything they use, consume, produce or depend on | 11 |
 | DORA critical functions and their footprint | services with `dora_cif: true`, their system, resources and owning teams | 9 |
 | Banking-outsourcing scope across blueprints | services, APIs, resources and datasets with `banking_outsourcing` true, with their system | 12 |
+| Workloads outside their cluster's environment | workloads whose environment differs from their cluster's (a shared non-prod cluster hosting a test workload) | 4 |
 
 `queries/load.sh` takes its environment variables from its own header. A query is parsed when saved but only checked against the blueprints when applied, so load the
 blueprints and entities first. Rows are owned by the loading user and a name is unique per

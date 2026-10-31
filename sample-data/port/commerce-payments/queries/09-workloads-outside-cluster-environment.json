@@ -1,0 +1,5 @@
+{
+  "name": "Sample: Workloads outside their cluster's environment",
+  "visibility": "PUBLIC",
+  "query": "MATCH (w:workload)-[:cluster]->(c:cluster)-[:environment]->(ce:environment),\n      (w)-[:environment]->(we:environment)\nWHERE ce.$identifier <> we.$identifier\nRETURN w, c, ce, we"
+}
