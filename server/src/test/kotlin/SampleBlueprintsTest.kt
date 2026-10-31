@@ -311,7 +311,7 @@ class SampleBlueprintsTest {
      * (`conversion/MappingValidation.kt`) checks that against the CURRENT blueprints and the
      * V22-seeded registries — enum <-> closed label values, the lifecycles dictionary, the tag
      * categories (engine = Database + Events), the per-kind type dictionaries (Component = the
-     * service enum + the library constant), the namespace dictionary, every label/annotation/
+     * service enum + the library constant), every label/annotation/
      * category key and the kinds they apply to. Loading it through the real API therefore
      * asserts BOTH zero blocking findings and zero drift; a registry edit (or a blueprint enum
      * edit) that forgets the other side fails here with the validator's own message. What no
@@ -450,8 +450,8 @@ class SampleBlueprintsTest {
             "_team" to setOf("member_count"),
             "domain" to setOf("critical_systems"),
             "product" to setOf("system_count", "critical_systems", "service_count"),
-            "system" to setOf("service_count", "cif_services", "cash_flow_services", "workload_replicas", "deploys_per_week"),
-            "dataset" to setOf("producer_count", "consumer_count", "adoption_count", "covenant_contract"),
+            "system" to setOf("service_count", "cif_services", "cash_flow_services"),
+            "dataset" to setOf("producer_count", "adoption_count", "covenant_contract"),
             "api" to setOf("adoption_count", "covenant_contract"),
             "service" to setOf("domain_title", "stack", "risk"),
             "workload" to setOf("service_lifecycle", "env_type", "languages"),

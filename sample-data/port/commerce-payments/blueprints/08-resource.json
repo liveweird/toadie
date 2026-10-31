@@ -4,6 +4,11 @@
   "description": "A logical piece of infrastructure a service depends on — a database, a cache, a broker, a transaction log. One entity across environments (orders-db, not orders-db-staging). Backstage kind: Resource (type → spec.type, engine → a tag, system → spec.system, the team field → spec.owner, depends_on → spec.dependsOn, hosted_on Port-only — dropped with the cluster it points at; data_classification/gdpr/pci_dss/banking_outsourcing/hosting_model/exposure/technology_status → the labels of the same name).",
   "icon": "Database",
   "hierarchyRelations": {"composition": "system"},
+  "tiers": {
+    "blueprint": 2,
+    "properties": { "description": 1, "type": 1, "engine": 2, "data_classification": 3, "exposure": 3, "hosting_model": 3, "gdpr": 3, "pci_dss": 3, "banking_outsourcing": 3 },
+    "relations": { "system": 1, "depends_on": 2 }
+  },
   "schema": {
     "properties": {
       "description": {

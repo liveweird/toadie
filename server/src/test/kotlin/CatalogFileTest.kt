@@ -104,7 +104,7 @@ class CatalogFileTest {
             CatalogFile(
                 kind = "System",
                 metadata = CatalogFileMetadata(name = uniqueEntityName("sys"), namespace = ns),
-                spec = EntitySpec(owner = "team-a", domain = "payments", type = "product"),
+                spec = EntitySpec(owner = "team-a", domain = "payments", type = "value-creation"),
             ),
             CatalogFile(
                 kind = "Domain",

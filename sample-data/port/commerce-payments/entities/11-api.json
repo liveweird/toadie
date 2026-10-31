@@ -7,7 +7,6 @@
     "team": "retail-tribe",
     "properties": {
       "description": "Product, category and availability queries for the storefront.",
-      "definition": "type Product {\n  sku: ID!\n  title: String!\n  priceMinor: Int!\n  available: Boolean!\n}\n\ntype Query {\n  product(sku: ID!): Product\n  products(category: String, first: Int = 20): [Product!]!\n}\n",
       "type": "graphql",
       "lifecycle": "production",
       "definition_url": "https://github.com/acme/catalog-service/blob/main/schema.graphql",
@@ -29,13 +28,11 @@
       "description": "Cart-to-order conversion used by the storefront.",
       "type": "openapi",
       "lifecycle": "production",
-      "definition": "openapi: 3.0.3\ninfo:\n  title: Checkout REST API\n  version: 2.0.0\npaths:\n  /carts/{cartId}/checkout:\n    post:\n      summary: Convert a cart into an order\n      responses:\n        \"201\":\n          description: Order created\n        \"409\":\n          description: Cart already checked out\n",
       "exposure": "public",
       "hosting_model": "public-cloud",
       "gdpr": true,
       "pci_dss": false,
       "banking_outsourcing": false,
-      "external": false,
       "links": [
         { "title": "API portal", "url": "https://api.example.com/docs/checkout" }
       ]
@@ -49,7 +46,6 @@
     "team": "retail-tribe",
     "properties": {
       "description": "Cart and stock updates pushed to an open browser session.",
-      "definition": "# Frames are newline-delimited JSON, client-initiated subscribe then server push.\n-> {\"op\":\"subscribe\",\"cartId\":\"c_123\"}\n<- {\"op\":\"cart.updated\",\"cartId\":\"c_123\",\"lines\":3,\"totalMinor\":8940}\n<- {\"op\":\"stock.changed\",\"sku\":\"SKU-9\",\"available\":false}\n",
       "type": "web-sockets",
       "lifecycle": "experimental",
       "definition_url": "https://github.com/acme/live-cart-gateway/blob/main/PROTOCOL.md",
@@ -70,7 +66,6 @@
       "description": "Order lifecycle events published by checkout-service onto the order bus.",
       "type": "asyncapi",
       "lifecycle": "experimental",
-      "definition": "asyncapi: 2.6.0\ninfo:\n  title: Order events\n  version: 0.4.0\nchannels:\n  order.placed:\n    subscribe:\n      message:\n        payload:\n          type: object\n          properties:\n            orderId: { type: string }\n            totalMinor: { type: integer }\n",
       "exposure": "internal",
       "hosting_model": "on-premise",
       "gdpr": false,
@@ -86,7 +81,6 @@
     "team": "payments-squad",
     "properties": {
       "description": "Authorise and capture card payments.",
-      "definition": "syntax = \"proto3\";\npackage acme.payments.v1;\n\nservice Payments {\n  rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);\n  rpc Capture(CaptureRequest) returns (CaptureResponse);\n}\n\nmessage AuthorizeRequest {\n  string order_id = 1;\n  int64 amount_minor = 2;\n  string currency = 3;\n}\nmessage AuthorizeResponse { string authorization_id = 1; }\nmessage CaptureRequest { string authorization_id = 1; }\nmessage CaptureResponse { bool captured = 1; }\n",
       "type": "grpc",
       "lifecycle": "production",
       "definition_url": "https://github.com/acme/payments-gateway/blob/main/proto/payments/v1/payments.proto",
@@ -106,15 +100,13 @@
     "team": "payments-squad",
     "properties": {
       "description": "The acquirer's authorisation endpoint. We consume it; we do not own it.",
-      "definition": "openapi: 3.0.3\ninfo:\n  title: Acquirer Authorisation API\n  version: 1.0.0\npaths:\n  /authorizations:\n    post:\n      summary: Authorise a card payment\n      responses:\n        \"201\":\n          description: Authorised\n        \"402\":\n          description: Declined\n",
       "type": "openapi",
       "lifecycle": "production",
       "definition_url": "https://developer.acquirer.example.com/openapi.yaml",
       "exposure": "partner",
       "gdpr": true,
       "pci_dss": true,
-      "banking_outsourcing": true,
-      "external": true
+      "banking_outsourcing": true
     },
     "relations": { "system": "acquirer" }
   }

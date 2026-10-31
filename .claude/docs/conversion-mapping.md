@@ -105,7 +105,7 @@ audit events: `.claude/docs/authorization.md`, `.claude/docs/observability.md`; 
 `.claude/docs/persistence.md` "V45".
 
 **Proof** — `SampleBlueprintsTest` stores the default mapping and requires zero findings AND zero
-drift against the sample blueprints and the seeded registries (V22, V43, V47); `MappingValidationTest` pins one
+drift against the sample blueprints and the seeded registries (V22, V43, V47, V50); `MappingValidationTest` pins one
 case per code (`.claude/docs/testing.md`); the export engine is "The export (phase 2)" and the import engine "The import (phase 4)" below. The SPA pages (the
 mappings list and editor, Export to Backstage, and the Backstage source of `/ontology/import`) are
 described in `web/CLAUDE.md`.

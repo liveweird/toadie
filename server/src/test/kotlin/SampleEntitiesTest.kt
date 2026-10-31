@@ -30,12 +30,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -55,7 +53,7 @@ import kotlin.test.assertTrue
  * (`properties`/`relations` equal the request's, after [toDocument]'s null-drop). A second pass
  * pins the coverage the set promises (`sample-data/port/commerce-payments/README.md`): every blueprint has entities,
  * every property AND every relation of every blueprint is used at least once (the `_user.team`
- * and `_team.parent` relations included), every value of the registry-mirroring `type` and
+ * and `_team.parent` relations included), every value of the registry-mirroring `type` (bar `PARTIAL_DICTIONARIES`: `system.type`) and
  * `lifecycle` enums is used at least once (the dictionary pickers are all checkable), the `team`
  * field is used both as a string and as an array, at least one relation value is a multi-element
  * array, and at least one relation was sent as an explicit JSON `null`. A third pass proves the
@@ -322,9 +320,7 @@ class SampleEntitiesTest {
     /**
      * Phase 5 (v1.27.0): derives every computed value straight from the sample entity files
      * (never a hardcoded number) and checks it against the value the API actually returned —
-     * `.claude/docs/ontology.md`'s "Computed properties" table. `deploys_per_week` is
-     * time-dependent (`now` keeps moving), so it is only range-asserted: positive, and no
-     * larger than the count of workloads it averaged over.
+     * `.claude/docs/ontology.md`'s "Computed properties" table.
      */
     private fun assertComputedProperties(
         requestsByFile: List<List<EntityRequest>>,
@@ -353,10 +349,13 @@ class SampleEntitiesTest {
             )
         }
 
-        // domain.critical_systems: direct aggregation over system.domain, filtered to criticality = critical.
+        // domain.critical_systems (2.35.0): two pathFilter entries (a UNION) — systems whose domain is D,
+        // and systems whose domain's parent_domain is D — filtered to criticality = critical.
+        val parentOfDomain = domains.associate { it.identifier to (it.relations["parent_domain"] as? JsonPrimitive)?.content }
         domains.forEach { domain ->
             val expected = systems.count { system ->
-                domain.identifier in teamValuesOf(system.relations["domain"]) &&
+                val systemDomains = teamValuesOf(system.relations["domain"])
+                (domain.identifier in systemDomains || systemDomains.any { parentOfDomain[it] == domain.identifier }) &&
                     (system.properties["criticality"] as? JsonPrimitive)?.content == "critical"
             }
             assertEquals(
@@ -405,44 +404,6 @@ class SampleEntitiesTest {
                 "system/${system.identifier}.service_count",
             )
         }
-
-        // system.workload_replicas / deploys_per_week: reverse pathFilter workload -> service -> system.
-        val systemOfWorkload = workloads.associate { workload ->
-            val serviceIdentifier = (workload.relations.getValue("service") as JsonPrimitive).content
-            val service = services.first { it.identifier == serviceIdentifier }
-            workload.identifier to (service.relations["system"] as? JsonPrimitive)?.content
-        }
-        var replicasSeen = false
-        var deploysSeen = false
-        systems.forEach { system ->
-            val matching = workloads.filter { systemOfWorkload[it.identifier] == system.identifier }
-            val replicasActual = propertiesOf("system", system.identifier)["workload_replicas"]
-            val replicaValues = matching.mapNotNull { (it.properties["replicas"] as? JsonPrimitive)?.doubleOrNull }
-            if (replicaValues.isEmpty()) {
-                assertNull(replicasActual, "system/${system.identifier}.workload_replicas should be absent")
-            } else {
-                replicasSeen = true
-                val sum = replicaValues.sum()
-                val expectedReplicas = if (sum == Math.floor(sum)) JsonPrimitive(sum.toLong()) else JsonPrimitive(sum)
-                assertEquals(expectedReplicas, replicasActual, "system/${system.identifier}.workload_replicas")
-            }
-
-            val deploysActual = propertiesOf("system", system.identifier)["deploys_per_week"]
-            if (matching.isEmpty()) {
-                assertNull(deploysActual, "system/${system.identifier}.deploys_per_week should be absent")
-            } else {
-                deploysSeen = true
-                val primitive = assertNotNull(deploysActual as? JsonPrimitive, "system/${system.identifier}.deploys_per_week")
-                val value = assertNotNull(primitive.doubleOrNull, "system/${system.identifier}.deploys_per_week must be numeric")
-                assertTrue(value > 0, "system/${system.identifier}.deploys_per_week must be positive, was $value")
-                assertTrue(
-                    value <= matching.size,
-                    "system/${system.identifier}.deploys_per_week ($value) must be at most its workload count (${matching.size})",
-                )
-            }
-        }
-        assertTrue(replicasSeen, "workload_replicas must be present on at least one system")
-        assertTrue(deploysSeen, "deploys_per_week must be present on at least one system")
 
         // service.domain_title: mirror system.domain.$title.
         services.forEach { service ->
@@ -542,8 +503,8 @@ class SampleEntitiesTest {
     }
 
     /**
-     * The 2.13.0 computed properties — `dataset.producer_count`/`consumer_count` (reverse one-hop
-     * pathFilter over `service.produces_datasets`/`consumes_datasets`), the two `adoption_count`
+     * The 2.13.0 computed properties — `dataset.producer_count` (reverse one-hop
+     * pathFilter over `service.produces_datasets`), the two `adoption_count`
      * inbound aggregations on `dataset`/`api`, and the two single-hop lifecycle mirrors on the
      * adoption relation entities — split out of [assertComputedProperties] purely to keep each
      * derivation walk under detekt's cyclomatic-complexity threshold.
@@ -560,8 +521,7 @@ class SampleEntitiesTest {
         val apiAdoptions = byBlueprint("api_adoption")
         val datasetAdoptions = byBlueprint("dataset_adoption")
 
-        // dataset.producer_count / consumer_count: reverse pathFilter over service.produces_datasets /
-        // consumes_datasets (2.13.0).
+        // dataset.producer_count: reverse pathFilter over service.produces_datasets (2.13.0).
         datasets.forEach { dataset ->
             val producers = services.count { service ->
                 dataset.identifier in teamValuesOf(service.relations["produces_datasets"])
@@ -570,14 +530,6 @@ class SampleEntitiesTest {
                 JsonPrimitive(producers.toLong()),
                 propertiesOf("dataset", dataset.identifier)["producer_count"],
                 "dataset/${dataset.identifier}.producer_count",
-            )
-            val consumers = services.count { service ->
-                dataset.identifier in teamValuesOf(service.relations["consumes_datasets"])
-            }
-            assertEquals(
-                JsonPrimitive(consumers.toLong()),
-                propertiesOf("dataset", dataset.identifier)["consumer_count"],
-                "dataset/${dataset.identifier}.consumer_count",
             )
             // dataset.adoption_count: direct inbound aggregation over dataset_adoption.dataset.
             val adoptions = datasetAdoptions.count { adoption ->
@@ -677,6 +629,13 @@ class SampleEntitiesTest {
     private companion object {
         /** The enum properties whose values are a seeded dictionary, exercised in full. */
         val DICTIONARY_PROPERTIES = setOf("type", "lifecycle")
+
+        /**
+         * (blueprint, property) dictionaries exempt from the exercised-in-full rule: only a
+         * non-empty subset of the values must be used — `system.type` has a six-value taxonomy
+         * wider than the five-system sample.
+         */
+        val PARTIAL_DICTIONARIES = setOf("system" to "type")
     }
 
     /** Pins the coverage the set claims (`sample-data/port/commerce-payments/README.md`'s table). */
@@ -705,7 +664,7 @@ class SampleEntitiesTest {
         }
 
         // The registry-mirroring dictionaries (per-kind types, lifecycles) are exercised in full,
-        // so every value of the Type/Lifecycle pickers has a sample entity behind it. A dictionary
+        // so every value of the Type/Lifecycle pickers has a sample entity behind it (bar [PARTIAL_DICTIONARIES]). A dictionary
         // is identified by (property id, enum values): `type` is one dictionary PER blueprint,
         // while `lifecycle` is the one global list shared by service/library/api, so its values
         // are counted across all three. Label/tag/Port-only enums only need the property set.
@@ -720,7 +679,14 @@ class SampleEntitiesTest {
             val used = blueprintIds.flatMap { requestsByBlueprint[it].orEmpty() }
                 .mapNotNull { (it.properties[propertyId] as? JsonPrimitive)?.content }
                 .toSet()
-            assertEquals(expected, used, "every value of '$propertyId' on ${blueprintIds.sorted()} must be used at least once")
+            if (blueprintIds.size == 1 && (blueprintIds.single() to propertyId) in PARTIAL_DICTIONARIES) {
+                assertTrue(
+                    used.isNotEmpty() && expected.containsAll(used),
+                    "'$propertyId' on ${blueprintIds.sorted()} must use a non-empty subset of its values, was $used",
+                )
+            } else {
+                assertEquals(expected, used, "every value of '$propertyId' on ${blueprintIds.sorted()} must be used at least once")
+            }
         }
 
         val teamValues = allRequests.mapNotNull { it.team }

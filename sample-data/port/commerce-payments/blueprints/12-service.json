@@ -4,6 +4,11 @@
   "description": "Every deployable runtime unit a team builds and runs: a backend service, a web front-end (SPA or server-rendered), a scheduled job, a data pipeline. The most-touched blueprint. Backstage kind: Component (type → spec.type, lifecycle → spec.lifecycle, system → spec.system, the team field → spec.owner, subcomponent_of → spec.subcomponentOf, depends_on + uses + uses_libraries → spec.dependsOn, provides_apis/consumes_apis → the same, languages/frameworks → tags, exposure/hosting_model/technology_status/gdpr/pci_dss/banking_outsourcing/cash_flow_impact/dora_cif → labels, repository → backstage.io/source-location, docs → backstage.io/techdocs-ref, kubernetes_* → the two kubernetes annotations); produces_datasets/consumes_datasets are Port-only, the data-side twin of provides_apis/consumes_apis.",
   "icon": "Microservice",
   "hierarchyRelations": {"composition": "system"},
+  "tiers": {
+    "blueprint": 2,
+    "properties": { "description": 1, "type": 1, "lifecycle": 2, "exposure": 3, "hosting_model": 3, "repository": 1, "gdpr": 3, "pci_dss": 3, "banking_outsourcing": 3, "cash_flow_impact": 3, "dora_cif": 3 },
+    "relations": { "system": 1, "subcomponent_of": 3, "depends_on": 2, "uses": 3, "uses_libraries": 4, "provides_apis": 2, "consumes_apis": 3, "produces_datasets": 2, "consumes_datasets": 3 }
+  },
   "schema": {
     "properties": {
       "description": {
@@ -141,6 +146,12 @@
         "title": "Schedule",
         "description": "Cron expression — jobs and pipelines only. Port-only: Backstage has no field for it."
       },
+      "oncall_schedule": {
+        "type": "string",
+        "title": "On-call schedule",
+        "description": "Link to the on-call rota for this service (the paging tool's schedule page) — the \"On-call\" link in Backstage metadata.links.",
+        "format": "url"
+      },
       "links": {
         "type": "array",
         "title": "Links",
@@ -193,7 +204,7 @@
     },
     "consumes_apis": {
       "title": "Consumes APIs",
-      "description": "The contracts it calls, topics it subscribes to included.",
+      "description": "The contracts it calls, topics it subscribes to included. Kept beside the api_adoption/dataset_adoption declarations on purpose (the relation says THAT, the adoption says which version/status); not cross-checked.",
       "target": "api",
       "required": false,
       "many": true
@@ -207,7 +218,7 @@
     },
     "consumes_datasets": {
       "title": "Consumes datasets",
-      "description": "Datasets this service reads (the consumes_apis twin). Port-only.",
+      "description": "Datasets this service reads (the consumes_apis twin). Port-only. Kept beside the api_adoption/dataset_adoption declarations on purpose (the relation says THAT, the adoption says which version/status); not cross-checked.",
       "target": "dataset",
       "required": false,
       "many": true

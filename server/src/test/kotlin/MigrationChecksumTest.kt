@@ -69,6 +69,7 @@ class MigrationChecksumTest {
         "V47__annotation_keys_definition_at_location.sql" to -1547585490,
         "V48__sso_identity.sql" to -1309986979,
         "V49__auth_sessions_id_token.sql" to -429125950,
+        "V50__system_types_taxonomy.sql" to -752586780,
     )
 
     @Test

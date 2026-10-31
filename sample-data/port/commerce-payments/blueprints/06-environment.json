@@ -3,6 +3,10 @@
   "title": "Environment",
   "description": "A place workloads run — production, staging, test, development. Port's default blueprint; Backstage has no counterpart, so an export drops it.",
   "icon": "Environment",
+  "tiers": {
+    "blueprint": 4,
+    "properties": { "type": 1 }
+  },
   "schema": {
     "properties": {
       "type": {

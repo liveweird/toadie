@@ -601,7 +601,7 @@ that row's create/update audit before another row or pass two begins. Final ERRO
 later cancellation cannot erase this event; pass two emits no duplicate. Audit logs remain
 post-commit external output, not an atomic database outbox or a process-crash delivery guarantee.
 
-Current migrations are `V1`–`V49` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V47, a data-only annotation-key seed, follows V43's paragraph; V48, the SSO identity columns, follows V47's; V49, the session's ID token column, follows V48's; V44, an additive column, follows V49's; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
+Current migrations are `V1`–`V50` (V39–V42 are described in their own sections below the catalog; V43, a data-only seed re-curation, sits beside V32; V47, a data-only annotation-key seed, follows V43's paragraph; V50, a data-only System-type re-curation, follows V47's; V48, the SSO identity columns, follows V50's; V49, the session's ID token column, follows V48's; V44, an additive column, follows V49's; V45, a new registry table, follows V44's; V46, the telemetry tables, has its own section at the end of this file, "Telemetry (V46)") — small enough that this section is the catalog (Lettuce splits it into `.claude/docs/features/migrations.md`; introduce that file when the count warrants it):
 
 - `V1__init` — the `users` table: `name` (≤50), `email` (≤254), `password_hash`, `role` with `CHECK ("role" IN ('ADMIN', 'USER'))` (single-column role storage; the wire shape stays a `roles` set, see `.claude/docs/authorization.md`), `password_changed_at` (epoch millis, 0 = never — retained as a timestamp; V25's monotonic `auth_version` supersedes timestamp-based token invalidation), `marked_as_deleted`; plus the partial unique index `uq_users_email_active` over active rows.
 - `V2__create_revoked_tokens` — the JWT blocklist for `/logout`: `jti` PK + `expires_at`, with an index on `expires_at` (the revoke path prunes expired rows opportunistically, so the table stays tiny).
@@ -783,6 +783,18 @@ index, so a soft-deleted twin did not conflict there). Idempotent: a second run 
 `allowed_kinds` is read back exclusively through `Json.decodeFromString`. The key is not one of
 the server-written `backstage.io/*` keys the registry refuses. The checksum is pinned in
 `MigrationChecksumTest`; `AnnotationKeyTest` checks that the five seeded keys are present.
+
+**V50 — System type taxonomy (2.35.0).** A pure DATA re-curation of V22's seeded `entity_types`
+row for `System` (V22's bytes stay immutable): the list moves from `product`/`capability` to the
+six-value taxonomy `value-creation`, `shared-service`, `integration`, `data-and-reporting`,
+`infrastructure-and-platform`, `external`, the same list the sample ontology's `system.type` and the
+default conversion mapping's `copy` rule carry (a mismatch is `VOCABULARY_DRIFT` on every read of the
+mapping). V22's idiom, not V43's: `ON CONFLICT (kind) WHERE NOT marked_as_deleted DO UPDATE` replaces
+the ACTIVE row's list wholesale once, when V50 applies to a database, an admin's additions included (the UI is a
+whole-document replace too), and the INSERT half covers a kind whose row an admin soft-deleted. Only
+`System` changes. A stored catalog file still typed `product`/`capability` keeps its document and
+shows a soft `TYPE_NOT_ALLOWED` finding on the Errors report until it is edited (registry rules are
+soft on read, strict on the next strict save). The checksum is pinned in `MigrationChecksumTest`.
 
 **V48 — SSO identity and passwordless accounts.** Three changes on `users`, no data rewrite and no
 backfill (every existing row keeps its hash and reads as "no SSO link"). `password_hash` DROP NOT

@@ -42,12 +42,17 @@ workload → cluster → environment placement. A relation may participate in bo
 
 Every blueprint has instances, every declared property and relation is used at least once, and
 every entity validates without findings. The entity set covers every value of the mirrored type
-and lifecycle dictionaries, direct and inherited ownership, relation arrays, and an explicit
+and lifecycle dictionaries (bar the System types: the five sample systems exercise three of the
+six values of that taxonomy, a deliberate exemption in `SampleEntitiesTest`), direct and inherited ownership, relation arrays, and an explicit
 null relation.
 
 Since 2.17.0 every service, API, resource and dataset carries the regulatory flags (`gdpr`,
 `pci_dss`, `banking_outsourcing`; services additionally `cash_flow_impact` and `dora_cif`, which
-the `system` blueprint counts), and both users carry an `employment_type`.
+the `system` blueprint counts), and both users carry an `employment_type`. Since 2.35.0 every
+blueprint also ships fill-in `tiers`, aligned so that one property has one tier everywhere, and the
+sample ontology is revised: teams carry a `teams_channel`, systems a six-value `type` (third parties
+are the type `external`), products are payment or non-payment, APIs store no inline definition,
+services get an `oncall_schedule` link, and the adoptions declare a `contract_version`.
 
 ## Load with the scripts
 
@@ -121,18 +126,18 @@ the matching definitions; reimporting unchanged entities with replacement disabl
 | `api` | 6 API and event contracts |
 | `service` | 10 services, sites, jobs, and pipelines |
 | `workload` | 9 runtime deployments |
-| `api_adoption` | 4 declared API consumptions, one major-line-less |
+| `api_adoption` | 4 declared API consumptions, one contract-version-less |
 | `dataset_adoption` | 3 declared dataset consumptions, one contract-version-less |
 
-Ten blueprints define twenty-four computed properties evaluated on reads:
+Ten blueprints define twenty-one computed properties evaluated on reads:
 
 | Blueprint | Computed properties |
 |---|---|
 | `_team` | aggregation `member_count` |
-| `domain` | aggregation `critical_systems` |
-| `product` | aggregations `system_count`, `critical_systems`, `service_count` |
-| `system` | aggregations `service_count`, `cif_services`, `cash_flow_services`, `workload_replicas`, `deploys_per_week` |
-| `dataset` | aggregations `producer_count`, `consumer_count`, `adoption_count`; calculation `covenant_contract` |
+| `domain` | aggregation `critical_systems` (the domain's own critical systems plus its direct sub-domains') |
+| `product` | aggregations `system_count`, `critical_systems`, `service_count` (a shared system's services count once per product) |
+| `system` | aggregations `service_count`, `cif_services`, `cash_flow_services` |
+| `dataset` | aggregations `producer_count`, `adoption_count`; calculation `covenant_contract` |
 | `api` | aggregation `adoption_count`; calculation `covenant_contract` |
 | `service` | mirror `domain_title`; calculations `stack`, `risk` |
 | `workload` | mirrors `service_lifecycle`, `env_type`, `languages` |
@@ -140,7 +145,7 @@ Ten blueprints define twenty-four computed properties evaluated on reads:
 | `dataset_adoption` | mirror `dataset_lifecycle` |
 
 Computed values are merged into response properties and are never accepted as write input.
-`deploys_per_week` is time-dependent; unresolvable computed values are absent rather than
+Unresolvable computed values are absent rather than
 findings. Ownership is direct on domain, product, system, service, library, API, resource,
 cluster, and dataset; workload ownership is inherited through its `service` relation, and
 `api_adoption`/`dataset_adoption` ownership is inherited through their `consumer` relation.
@@ -172,7 +177,7 @@ owner: a rerun reports `exists, skipped` for every query and never overwrites an
 [`mapping/backstage.json`](mapping/backstage.json) is a conversion mapping document
 (`schemaVersion` 1): the stored DATA — never server code — that says which Port blueprint is which
 Backstage kind and which property, relation or title field becomes which label, tag category,
-annotation, link or spec field. It holds eight pairs and 120 rules: `_team` → Group, `_user` →
+annotation, link or spec field. It holds eight pairs and 119 rules: `_team` → Group, `_user` →
 User, `domain` → Domain, `system` → System, `service` and `library` → Component (the library pair
 is selected by `spec.type: library` and writes that type as a constant), `api` → API and
 `resource` → Resource. `product`, `dataset`, `environment`, `cluster`, `workload`, `api_adoption`

@@ -10,16 +10,17 @@ makes of the 42 Port entities of the eight mapped blueprints.
 | Kind | Count | Examples |
 |---|---:|---|
 | Domain | 5 | `commerce`, `payments`, `platform`, `shared-services`, `back-office` |
-| System | 5 | `storefront`, `payments`, `external/acquirer`, `invoicing`, `developer-portal` |
+| System | 5 | `storefront`, `payments`, `acquirer`, `invoicing`, `developer-portal` |
 | Component | 12 | ten services (`storefront-web`, `checkout-service`, `payments-gateway`, ...) and two libraries (`payments-sdk`, `acme-commons`) |
 | API | 6 | `catalog-graphql`, `order-events`, `payments-grpc` |
 | Resource | 8 | `orders-db`, `order-bus`, `settlement-warehouse` |
 | Group | 4 | `platform-tribe`, `retail-tribe`, `payments-squad`, `storefront-squad` |
 | User | 2 | `anna.kowalska`, `marek.nowak` |
 
-Forty documents use the `default` namespace and two use `external` (a Port entity flagged
-`external`). Every structural shape, namespace, and registry-backed value is valid against the seeded
-vocabulary. The file uses all seeded type values, all four lifecycles, both namespaces, all eleven
+All 42 documents use the `default` namespace (third parties are a System type, `external`, since
+2.35.0, not a namespace). Every structural shape, namespace, and registry-backed value is valid against the seeded
+vocabulary. The file uses all seeded type values except three of the six System types (the sample has five systems),
+all four lifecycles, all eleven
 label keys, all five annotation keys, and all four tag categories.
 
 The catalog is intentionally not reference-clean. Four soft reference findings in two documents
