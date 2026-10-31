@@ -9,7 +9,7 @@ describe("kindTier", () => {
     ["System", 1],
     ["Group", 1],
     ["Component", 2],
-    ["Resource", 3],
+    ["Resource", 2],
     ["API", 3],
     ["User", 4],
   ] as const)("%s is tier %d", (kind, tier) => {
