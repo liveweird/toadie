@@ -24,11 +24,11 @@ jackson-jq = "1.6.5"
 jackson-bom = "2.22.4"
 kotlin = "2.4.21"
 kover = "0.9.11"
-logback = "1.6.5"
+logback = "1.6.6"
 # The MCP endpoint groundwork (release 2.15.0): pulls in ktor-server-sse transitively at an
 # older Ktor line — the explicit ktorLibs.server.sse dependency below keeps every Ktor artifact
 # on the repo's own 3.6.0 catalog line (see server/build.gradle.kts).
-mcp-kotlin-sdk = "0.15.0"
+mcp-kotlin-sdk = "0.16.0"
 # Netty alignment: Ktor's engine ships Netty 4.2 while r2dbc-postgresql 1.1.3 asks for reactor-netty
 # 1.1.22 (built on 4.1.112) - Gradle lifted the shared modules to 4.2 and left the DNS/proxy modules
 # only reactor-netty uses at 4.1.112 (CVE-2026-42579/-45674/-47691), a mixed classpath under the
@@ -42,7 +42,7 @@ netty = "4.2.19.Final"
 # Move together: each opentelemetry-ktor-3.0 alpha requires exactly one SDK (2.33.0-alpha -> 1.67.0);
 # a mismatched pair breaks at startup (NoClassDefFoundError from api-incubator).
 opentelemetry = "1.67.0"
-opentelemetry-ktor = "2.33.0-alpha"
+opentelemetry-ktor = "2.33.1-alpha"
 opentelemetry-semconv = "1.44.0"
 okhttp = "5.5.1"
 r2dbc-postgresql = "1.1.3.RELEASE"
