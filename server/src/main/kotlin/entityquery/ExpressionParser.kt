@@ -12,29 +12,30 @@ import kotlinx.serialization.json.JsonPrimitive
 
 internal const val MAX_EXPRESSION_DEPTH = 64
 
-internal fun parseExpression(cursor: TokenCursor): Expr = parseOr(cursor, depth = 0)
+internal fun parseExpression(cursor: TokenCursor): Expr = parseOr(cursor, depth = 0, insideExists = false)
 
-private fun parseOr(cursor: TokenCursor, depth: Int): Expr {
-    var left = parseAnd(cursor, depth)
+/** [insideExists] (2.36.0) is true while parsing an `EXISTS { … WHERE <here> }` block's own WHERE, where a nested EXISTS is refused. */
+private fun parseOr(cursor: TokenCursor, depth: Int, insideExists: Boolean): Expr {
+    var left = parseAnd(cursor, depth, insideExists)
     while (cursor.checkKeyword("OR")) {
         cursor.advance()
-        val right = parseAnd(cursor, depth)
+        val right = parseAnd(cursor, depth, insideExists)
         left = Expr.Or(left, right, left.span.until(right.span))
     }
     return left
 }
 
-private fun parseAnd(cursor: TokenCursor, depth: Int): Expr {
-    var left = parseNot(cursor, depth)
+private fun parseAnd(cursor: TokenCursor, depth: Int, insideExists: Boolean): Expr {
+    var left = parseNot(cursor, depth, insideExists)
     while (cursor.checkKeyword("AND")) {
         cursor.advance()
-        val right = parseNot(cursor, depth)
+        val right = parseNot(cursor, depth, insideExists)
         left = Expr.And(left, right, left.span.until(right.span))
     }
     return left
 }
 
-private fun parseNot(cursor: TokenCursor, depth: Int): Expr {
+private fun parseNot(cursor: TokenCursor, depth: Int, insideExists: Boolean): Expr {
     if (cursor.checkKeyword("NOT")) {
         val notToken = cursor.peek()
         if (depth + 1 > MAX_EXPRESSION_DEPTH) throw QueryException(
@@ -48,34 +49,97 @@ private fun parseNot(cursor: TokenCursor, depth: Int): Expr {
             )
         )
         cursor.advance()
-        val operand = parseNot(cursor, depth + 1)
+        val operand = parseNot(cursor, depth + 1, insideExists)
         return Expr.Not(operand, notToken.span.until(operand.span))
     }
-    return parsePredicate(cursor, depth)
+    return parsePredicate(cursor, depth, insideExists)
 }
 
-private fun parsePredicate(cursor: TokenCursor, depth: Int): Expr {
+private fun parsePredicate(cursor: TokenCursor, depth: Int, insideExists: Boolean): Expr {
     rejectClauseKeyword(cursor)
+    if (cursor.checkKeyword("EXISTS")) return parseExists(cursor, depth, insideExists)
+    rejectPatternPredicate(cursor)
     if (cursor.check(TokenKind.LPAREN)) {
         val lparen = cursor.peek()
-        if (depth + 1 > MAX_EXPRESSION_DEPTH) throw QueryException(
-            QueryDiagnostic(
-                QueryDiagnosticCodes.SYNTAX,
-                "Expression nesting deeper than $MAX_EXPRESSION_DEPTH levels",
-                lparen.span.line,
-                lparen.span.column,
-                lparen.span.endLine,
-                lparen.span.endColumn,
-            )
-        )
+        if (depth + 1 > MAX_EXPRESSION_DEPTH) throw nestingTooDeep(lparen.span)
         cursor.advance()
-        val expr = parseOr(cursor, depth + 1)
+        val expr = parseOr(cursor, depth + 1, insideExists)
         cursor.expect(TokenKind.RPAREN)
         return expr
     }
     val operand = parseOperand(cursor)
     return parseComparisonOrTruthy(cursor, operand)
 }
+
+private fun nestingTooDeep(span: Span): QueryException = QueryException(
+    QueryDiagnostic(
+        QueryDiagnosticCodes.SYNTAX,
+        "Expression nesting deeper than $MAX_EXPRESSION_DEPTH levels",
+        span.line,
+        span.column,
+        span.endLine,
+        span.endColumn,
+    ),
+)
+
+/**
+ * `EXISTS '{' pattern (',' pattern)* (WHERE expression)? '}'` (2.36.0). The `{` counts one nesting
+ * level, like `(`; the block's own WHERE parses with [parseOr] at `depth + 1` and `insideExists`
+ * set, so a nested EXISTS (and, in `parseEdge`, a relationship variable) is refused.
+ */
+private fun parseExists(cursor: TokenCursor, depth: Int, insideExists: Boolean): Expr {
+    val existsToken = cursor.advance()
+    if (cursor.check(TokenKind.LPAREN)) {
+        throw unsupported(
+            existsToken.span,
+            "the exists() function is not supported — use IS NOT NULL for a property, EXISTS { … } for a pattern",
+        )
+    }
+    if (insideExists) throw unsupported(existsToken.span, "EXISTS inside EXISTS is not supported")
+    if (!cursor.check(TokenKind.LBRACE)) cursor.unexpected("'{'")
+    val lbrace = cursor.peek()
+    if (depth + 1 > MAX_EXPRESSION_DEPTH) throw nestingTooDeep(lbrace.span)
+    cursor.advance()
+    if (cursor.checkKeyword("MATCH") || cursor.checkKeyword("OPTIONAL")) {
+        throw unsupported(
+            cursor.peek().span,
+            "EXISTS { MATCH … } is not supported — write the pattern directly: EXISTS { (a)-[:r]->(b) }",
+        )
+    }
+    val patterns = mutableListOf(parsePattern(cursor, insideExists = true))
+    while (cursor.match(TokenKind.COMMA) != null) {
+        patterns += parsePattern(cursor, insideExists = true)
+    }
+    val where = if (cursor.matchKeyword("WHERE")) parseOr(cursor, depth + 1, insideExists = true) else null
+    val close = cursor.expect(TokenKind.RBRACE)
+    return Expr.Exists(patterns, where, existsToken.span.until(close.span))
+}
+
+/**
+ * A bare pattern used as a predicate (`WHERE (a)-[:r]->(b)`, Cypher's pattern predicate) is refused
+ * with the EXISTS spelling. The lookaheads are the `(` shapes no expression can start with today:
+ * `( :`, `( )`, `( IDENT :`, `( IDENT {`, `( IDENT ) -` and `( IDENT ) <` — `(a.x …` stays grouping.
+ */
+private fun rejectPatternPredicate(cursor: TokenCursor) {
+    val open = cursor.peek()
+    if (open.kind == TokenKind.LPAREN && startsNodePattern(cursor)) {
+        throw unsupported(open.span, "a pattern predicate is not supported — wrap it as EXISTS { (a)-[:r]->(b) }")
+    }
+}
+
+/** True when the tokens after the current `(` can only be a node pattern, never a grouped expression. */
+private fun startsNodePattern(cursor: TokenCursor): Boolean {
+    val first = cursor.peek(1)
+    if (first.kind == TokenKind.COLON || first.kind == TokenKind.RPAREN) return true
+    if (first.kind != TokenKind.IDENT || isReservedWord(first.text)) return false
+    return when (cursor.peek(2).kind) {
+        TokenKind.COLON, TokenKind.LBRACE -> true
+        TokenKind.RPAREN -> cursor.peek(3).kind in ARROW_STARTS
+        else -> false
+    }
+}
+
+private val ARROW_STARTS = setOf(TokenKind.MINUS, TokenKind.LT)
 
 private fun comparisonOpFor(kind: TokenKind): ComparisonOp? = when (kind) {
     TokenKind.EQ -> ComparisonOp.EQUAL

@@ -8,13 +8,14 @@ package ch.nokillswit.entityquery
 
 private fun isEdgeStart(cursor: TokenCursor): Boolean = cursor.check(TokenKind.MINUS) || cursor.check(TokenKind.LT)
 
-internal fun parsePattern(cursor: TokenCursor): Pattern {
+/** [insideExists] (2.36.0): the pattern sits in an `EXISTS { … }` block, where a relationship variable is refused. */
+internal fun parsePattern(cursor: TokenCursor, insideExists: Boolean = false): Pattern {
     rejectPathVariable(cursor)
     val start = cursor.peek().span
     val nodes = mutableListOf(parseNode(cursor))
     val edges = mutableListOf<EdgePattern>()
     while (isEdgeStart(cursor)) {
-        edges += parseEdge(cursor)
+        edges += parseEdge(cursor, insideExists)
         nodes += parseNode(cursor)
     }
     return Pattern(nodes, edges, start.until(cursor.previous().span))
@@ -72,7 +73,7 @@ private fun parseLabelName(cursor: TokenCursor): String {
  * which also keeps `a < -1` in WHERE from ever reaching this parser (arrows are only assembled
  * where a pattern is expected).
  */
-internal fun parseEdge(cursor: TokenCursor): EdgePattern {
+internal fun parseEdge(cursor: TokenCursor, insideExists: Boolean = false): EdgePattern {
     val edgeStart = cursor.peek().span
     var incoming = false
     var lastToken: Token
@@ -92,6 +93,12 @@ internal fun parseEdge(cursor: TokenCursor): EdgePattern {
     if (cursor.check(TokenKind.LBRACKET) && cursor.adjacent(lastToken, cursor.peek())) {
         cursor.advance()
         if (cursor.check(TokenKind.IDENT) && !isReservedWord(cursor.peek().text)) {
+            if (insideExists) {
+                throw unsupported(
+                    cursor.peek().span,
+                    "a relationship variable inside EXISTS is not supported — leave the relationship anonymous",
+                )
+            }
             variable = parseVariableName(cursor)
         }
         if (cursor.check(TokenKind.COLON)) {

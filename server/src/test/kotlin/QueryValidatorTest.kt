@@ -21,7 +21,9 @@ import ch.nokillswit.entityquery.Query
 import ch.nokillswit.entityquery.QueryDiagnosticCodes
 import ch.nokillswit.entityquery.QuerySchema
 import ch.nokillswit.entityquery.Returns
+import ch.nokillswit.entityquery.MAX_QUERY_NODE_PATTERNS
 import ch.nokillswit.entityquery.Span
+import ch.nokillswit.entityquery.parseEntityQuery
 import ch.nokillswit.entityquery.validateAndBind
 import ch.nokillswit.entityquery.validateEntityQuery
 import kotlinx.serialization.json.JsonPrimitive
@@ -523,5 +525,169 @@ class QueryValidatorTest {
         val (_, slots) = validateAndBind(q, baseSchema())
         assertEquals(mapOf("a" to 0, "b" to 1), slots.nodes)
         assertNull(slots.nodes["r"])
+    }
+
+    // --- EXISTS { pattern } (2.36.0) ---------------------------------------------------------------
+
+    private fun check(text: String) = validateEntityQuery(parseEntityQuery(text), baseSchema())
+
+    private fun existsCodes(text: String) = check(text).map { it.code }
+
+    @Test
+    fun `a correlated EXISTS block validates, including a second pattern anchored on the first's local`() {
+        assertEquals(emptyList(), check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) } RETURN s"))
+        assertEquals(emptyList(), check("MATCH (s:service) WHERE NOT EXISTS { (s)-[:owner]->(g:group), (g)-->(h) } RETURN s"))
+    }
+
+    @Test
+    fun `an uncorrelated first pattern is DISCONNECTED_PATTERN at the pattern's span, naming the variable`() {
+        val text = "MATCH (s:service) WHERE NOT EXISTS { (g:group) } RETURN s"
+        val finding = check(text).single()
+        assertEquals(QueryDiagnosticCodes.DISCONNECTED_PATTERN, finding.code)
+        assertEquals(1, finding.line)
+        assertEquals(text.indexOf("(g:group)") + 1, finding.column)
+        assertEquals(
+            "Pattern `g` inside EXISTS shares no variable with the outer query or an earlier pattern of the block — " +
+                "a per-row scan is refused",
+            finding.message,
+        )
+    }
+
+    @Test
+    fun `an anonymous uncorrelated pattern gets the anonymous wording`() {
+        val finding = check("MATCH (s:service) WHERE EXISTS { (:group) } RETURN s").single()
+        assertEquals(QueryDiagnosticCodes.DISCONNECTED_PATTERN, finding.code)
+        assertTrue(finding.message.startsWith("An anonymous pattern inside EXISTS shares no variable"), finding.message)
+    }
+
+    @Test
+    fun `the order rule is in written order - a later pattern cannot connect an earlier one`() {
+        // The FIRST pattern shares nothing with the outer query; the second would connect it, but too late.
+        val early = check("MATCH (s:service) WHERE EXISTS { (g:group)<-[:owner]-(t:service), (s)-[:owner]->(g) } RETURN s")
+        assertEquals(listOf(QueryDiagnosticCodes.DISCONNECTED_PATTERN), early.map { it.code })
+        assertTrue(early.single().message.startsWith("Pattern `g` inside"), early.single().message)
+        // A second pattern sharing nothing with the outer query or the first.
+        val late = check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group), (x:resource)-->(y:resource) } RETURN s")
+        assertEquals(listOf(QueryDiagnosticCodes.DISCONNECTED_PATTERN), late.map { it.code })
+        assertTrue(late.single().message.startsWith("Pattern `x` inside"), late.single().message)
+    }
+
+    @Test
+    fun `a block-local variable is invisible in RETURN and in an outer WHERE with a pointed message and no suggestion`() {
+        val inReturn = check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) } RETURN g").single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_VARIABLE, inReturn.code)
+        assertEquals("Variable `g` is bound inside EXISTS and is not visible here", inReturn.message)
+        assertNull(inReturn.suggestion)
+        val inWhere = check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) } AND g.\$identifier = 'x' RETURN s").single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_VARIABLE, inWhere.code)
+        assertEquals("Variable `g` is bound inside EXISTS and is not visible here", inWhere.message)
+        assertNull(inWhere.suggestion)
+        // An ordinary unknown variable keeps the plain message and its suggestion.
+        val plain = check("MATCH (service) RETURN servic").single()
+        assertEquals("Unknown variable `servic`", plain.message)
+        assertEquals("service", plain.suggestion)
+    }
+
+    @Test
+    fun `a block-local variable is visible to the block's own WHERE`() {
+        assertEquals(
+            emptyList(),
+            check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) WHERE g.\$identifier = 'x' } RETURN s"),
+        )
+    }
+
+    @Test
+    fun `a local name is free again afterwards and may repeat across blocks with different labels`() {
+        assertEquals(
+            emptyList(),
+            check(
+                "MATCH (s:service)-[:owner]->(x:group) WHERE EXISTS { (x)<-[:owner]-(g:service) } " +
+                    "MATCH (x)-->(g:resource) RETURN g",
+            ),
+        )
+        assertEquals(
+            emptyList(),
+            check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) } AND EXISTS { (s)-->(g:resource) } RETURN s"),
+        )
+    }
+
+    @Test
+    fun `a local keeps its evaluator slot while an outer binding's labels are untouched by the block`() {
+        val (diagnostics, slots) = validateAndBind(
+            parseEntityQuery("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) } RETURN *"),
+            baseSchema(),
+        )
+        assertEquals(emptyList(), diagnostics)
+        assertEquals(setOf("s", "g"), slots.nodes.keys)
+        // `a` is unlabelled outside; the block labels it `group`, which must not leak: `a.name` still
+        // resolves against the union of every blueprint (service has `name`).
+        assertEquals(emptyList(), check("MATCH (a) WHERE EXISTS { (a:group)-->(x) } AND a.name = 'x' RETURN a"))
+    }
+
+    @Test
+    fun `an outer variable re-labelled inside the block is DUPLICATE_VARIABLE`() {
+        assertEquals(
+            listOf(QueryDiagnosticCodes.DUPLICATE_VARIABLE),
+            existsCodes("MATCH (s:service) WHERE EXISTS { (s:group)-->(x) } RETURN s"),
+        )
+    }
+
+    @Test
+    fun `ordinary checks run inside the block with their suggestions`() {
+        val relation = check("MATCH (s:service) WHERE EXISTS { (s)-[:onwer]->(g:group) } RETURN s").single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_RELATION, relation.code)
+        assertEquals("owner", relation.suggestion)
+        val label = check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:grop) } RETURN s")
+            .single { it.code == QueryDiagnosticCodes.UNKNOWN_LABEL }
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_LABEL, label.code)
+        assertEquals("group", label.suggestion)
+        val inline = check("MATCH (s:service) WHERE EXISTS { (s {nmae: 'x'})-->(g) } RETURN s").single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_PROPERTY, inline.code)
+        assertEquals("name", inline.suggestion)
+        val inner = check("MATCH (s:service) WHERE EXISTS { (s)-->(t:service) WHERE t.nmae = 'x' } RETURN s").single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_PROPERTY, inner.code)
+        assertEquals("name", inner.suggestion)
+        val target = check("MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(r:resource) } RETURN s").single()
+        assertEquals(QueryDiagnosticCodes.UNKNOWN_RELATION, target.code)
+        assertTrue(target.message.contains("targets `group`, not `resource`"), target.message)
+    }
+
+    @Test
+    fun `a bad hop range inside a block is RANGE_INVALID`() {
+        val block = Expr.Exists(listOf(chain(node("s"), edge(range = IntRange(5, 2)), node("x"))), null, span(1))
+        val q = query(listOf(match(singlePattern(node("s", listOf("service"))), where = block)), returns = returnVars("s"))
+        assertEquals(listOf(QueryDiagnosticCodes.RANGE_INVALID), codes(q))
+    }
+
+    @Test
+    fun `team and hierarchy edge types validate inside a block`() {
+        assertEquals(emptyList(), check("MATCH (s:service) WHERE NOT EXISTS { (s)-[:\$team]->(t:_team) } RETURN s"))
+        assertEquals(emptyList(), check("MATCH (s:service) WHERE EXISTS { (s)-[:composition*1..3]->(x) } RETURN s"))
+    }
+
+    @Test
+    fun `a block in an OPTIONAL MATCH WHERE correlates on the optional's own variable`() {
+        assertEquals(
+            emptyList(),
+            check("MATCH (s:service) OPTIONAL MATCH (s)-[:owner]->(g:group) WHERE EXISTS { (g)<-[:owner]-(o:service) } RETURN s, g"),
+        )
+    }
+
+    @Test
+    fun `an OPTIONAL MATCH cannot reuse only a block-local variable`() {
+        val finding = check(
+            "MATCH (s:service) WHERE EXISTS { (s)-[:owner]->(g:group) } OPTIONAL MATCH (g)-->(h) RETURN s",
+        ).single()
+        assertEquals(QueryDiagnosticCodes.DISCONNECTED_PATTERN, finding.code)
+        assertTrue(finding.message.startsWith("OPTIONAL MATCH must reuse"), finding.message)
+    }
+
+    @Test
+    fun `the caps count a block's node patterns`() {
+        val nodes = (0..MAX_QUERY_NODE_PATTERNS).map { node("n$it") }
+        val edges = (1..MAX_QUERY_NODE_PATTERNS).map { edge() }
+        val block = Expr.Exists(listOf(Pattern(nodes, edges, span(1))), null, span(1))
+        val q = query(listOf(match(singlePattern(node("n0")), where = block)), returns = returnVars("n0"))
+        assertTrue(QueryDiagnosticCodes.TOO_MANY_PATTERNS in codes(q))
     }
 }

@@ -12,11 +12,13 @@ import ch.nokillswit.entityquery.StringOperator
 import ch.nokillswit.entityquery.Truth
 import ch.nokillswit.entityquery.candidateLookup
 import ch.nokillswit.entityquery.compare
+import ch.nokillswit.entityquery.PropertyLookup
 import ch.nokillswit.entityquery.evaluate
 import ch.nokillswit.entityquery.inList
 import ch.nokillswit.entityquery.isNull
 import ch.nokillswit.entityquery.stringOp
 import ch.nokillswit.entityquery.truthy
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -26,6 +28,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -43,6 +46,10 @@ class QueryValuesTest {
     private fun value(v: JsonElement) = Operand.Value(Literal(v, span), span)
 
     private fun prop(variable: String, key: String) = Operand.Property(variable, key, span)
+
+    /** [evaluate] for an expression with no EXISTS block — reaching one is a test bug. */
+    private fun evaluate(expr: Expr, lookup: PropertyLookup): Truth =
+        runBlocking { evaluate(expr, lookup) { error("no EXISTS in this test") } }
 
     // --- Kleene tables -----------------------------------------------------------------------
 
@@ -240,5 +247,47 @@ class QueryValuesTest {
         val atHaystack = JsonPrimitive("a".repeat(MAX_STRING_OPERAND_CHARS))
         val atNeedle = JsonPrimitive("a".repeat(MAX_STRING_NEEDLE_CHARS))
         assertEquals(Truth.TRUE, stringOp(StringOperator.CONTAINS, atHaystack, atNeedle))
+    }
+
+    // --- EXISTS (2.36.0) -------------------------------------------------------------------------
+
+    private val block = Expr.Exists(emptyList(), null, span)
+    private val unknown = Expr.Compare(ComparisonOp.EQUAL, prop("b", "age"), value(JsonPrimitive(30)), span)
+    private val alwaysTrue = Expr.IsNull(prop("b", "missing"), negated = false, span = span)
+    private val alwaysFalse = Expr.IsNull(prop("b", "missing"), negated = true, span = span)
+    private val noVariables: PropertyLookup = { _, _ -> null }
+
+    private fun evaluateWithBlock(expr: Expr, answer: Truth): Pair<Truth, Int> {
+        var asked = 0
+        val truth = runBlocking { evaluate(expr, noVariables) { asked++; answer } }
+        return truth to asked
+    }
+
+    @Test
+    fun `EXISTS answers through the callback and NOT inverts it`() {
+        assertEquals(Truth.TRUE to 1, evaluateWithBlock(block, Truth.TRUE))
+        assertEquals(Truth.FALSE to 1, evaluateWithBlock(Expr.Not(block, span), Truth.TRUE))
+        assertEquals(Truth.TRUE to 1, evaluateWithBlock(Expr.Not(block, span), Truth.FALSE))
+    }
+
+    @Test
+    fun `AND short-circuits on a FALSE left side and OR on a TRUE left side`() {
+        assertEquals(Truth.FALSE to 0, evaluateWithBlock(Expr.And(alwaysFalse, block, span), Truth.TRUE))
+        assertEquals(Truth.TRUE to 0, evaluateWithBlock(Expr.Or(alwaysTrue, block, span), Truth.FALSE))
+        // The other shapes still evaluate the block — and an UNKNOWN left side does too (Kleene).
+        assertEquals(Truth.TRUE to 1, evaluateWithBlock(Expr.And(alwaysTrue, block, span), Truth.TRUE))
+        assertEquals(Truth.FALSE to 1, evaluateWithBlock(Expr.Or(alwaysFalse, block, span), Truth.FALSE))
+        assertEquals(Truth.UNKNOWN to 1, evaluateWithBlock(Expr.And(unknown, block, span), Truth.TRUE))
+        assertEquals(Truth.FALSE to 1, evaluateWithBlock(Expr.And(unknown, block, span), Truth.FALSE))
+        assertEquals(Truth.TRUE to 1, evaluateWithBlock(Expr.Or(unknown, block, span), Truth.TRUE))
+        assertEquals(Truth.UNKNOWN to 1, evaluateWithBlock(Expr.Or(unknown, block, span), Truth.FALSE))
+    }
+
+    @Test
+    fun `a throwing EXISTS callback is never reached behind a decided short-circuit`() {
+        val boom: suspend (Expr.Exists) -> Truth = { error("must not be asked") }
+        assertEquals(Truth.FALSE, runBlocking { evaluate(Expr.And(alwaysFalse, block, span), noVariables, boom) })
+        assertEquals(Truth.TRUE, runBlocking { evaluate(Expr.Or(alwaysTrue, block, span), noVariables, boom) })
+        assertFailsWith<IllegalStateException> { runBlocking { evaluate(Expr.And(unknown, block, span), noVariables, boom) } }
     }
 }

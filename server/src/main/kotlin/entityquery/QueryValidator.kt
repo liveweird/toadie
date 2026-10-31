@@ -55,6 +55,12 @@ private class QueryValidation(private val schema: QuerySchema) {
     private val bindings = mutableMapOf<String, VariableBinding>()
     private val boundNodeVars = mutableSetOf<String>()
 
+    // Node variables introduced INSIDE an `EXISTS { … }` block (2.36.0): scoped to the block, removed
+    // from [bindings] on exit, but remembered here so an outside reference gets the pointed message.
+    // They KEEP their [nodeSlots] entry (the evaluator needs a slot to bind them in a block-local
+    // copy of the binding); an outer binding never holds one, so `RETURN *` is unaffected.
+    private val existsLocals = mutableSetOf<String>()
+
     // Union-find over PLAIN (non-optional) pattern indices — every node inside one pattern is
     // already connected by construction (a linear node-edge-node chain), so disconnection is a
     // question of whether two DIFFERENT patterns share a variable, not a per-node graph.
@@ -90,18 +96,17 @@ private class QueryValidation(private val schema: QuerySchema) {
     }
 
     private fun checkCaps(query: Query) {
-        val allClauses = query.matches + query.optionals
-        val totalNodes = allClauses.sumOf { clause -> clause.patterns.sumOf { it.nodes.size } }
+        val patterns = query.allPatterns()
+        val totalNodes = patterns.sumOf { it.nodes.size }
         if (totalNodes > MAX_QUERY_NODE_PATTERNS) {
             diagnostics += diag(QueryDiagnosticCodes.TOO_MANY_PATTERNS, "Too many node patterns (max $MAX_QUERY_NODE_PATTERNS)", query.span)
         }
-        if (allVariableNames(allClauses).size > MAX_QUERY_VARIABLES) {
+        if (allVariableNames(patterns).size > MAX_QUERY_VARIABLES) {
             diagnostics += diag(QueryDiagnosticCodes.TOO_MANY_VARIABLES, "Too many variables (max $MAX_QUERY_VARIABLES)", query.span)
         }
     }
 
-    private fun allVariableNames(clauses: List<MatchClause>): Set<String> {
-        val patterns = clauses.flatMap { it.patterns }
+    private fun allVariableNames(patterns: List<Pattern>): Set<String> {
         val nodeVars = patterns.flatMap { it.nodes }.mapNotNull { it.variable }
         val edgeVars = patterns.flatMap { it.edges }.mapNotNull { it.variable }
         return (nodeVars + edgeVars).toSet()
@@ -312,19 +317,53 @@ private class QueryValidation(private val schema: QuerySchema) {
             is Expr.StringOp -> { validateOperand(expr.left); validateOperand(expr.right) }
             is Expr.IsNull -> validateOperand(expr.operand)
             is Expr.Truthy -> validateOperand(expr.operand)
+            is Expr.Exists -> validateExists(expr)
         }
     }
+
+    /**
+     * `EXISTS { … }` (2.36.0). Every block pattern, in WRITTEN order, must share a node variable
+     * with the outer scope (the variables bound when this WHERE runs) or with an earlier pattern of
+     * the block — otherwise evaluation would be a per-row scan. The ordinary pattern checks run
+     * unchanged; on exit every variable the block introduced is dropped from [bindings] (so a later
+     * clause may rebind the name) and remembered in [existsLocals], and any label an outer variable
+     * was first given INSIDE the block is rolled back with it.
+     */
+    private fun validateExists(block: Expr.Exists) {
+        val outer = HashMap(bindings)
+        val connected = outer.filterValues { it.kind == VariableKind.NODE }.keys.toMutableSet()
+        block.patterns.forEach { pattern ->
+            val names = pattern.nodes.mapNotNull { it.variable }
+            if (names.none { it in connected }) {
+                diagnostics += diag(QueryDiagnosticCodes.DISCONNECTED_PATTERN, uncorrelatedMessage(names.minOrNull()), pattern.span)
+            }
+            processPattern(pattern, plainPatternIndex = null)
+            connected += names
+        }
+        block.where?.let { validateExpr(it) }
+        existsLocals += bindings.keys - outer.keys
+        bindings.clear()
+        bindings.putAll(outer)
+    }
+
+    private fun uncorrelatedMessage(name: String?): String {
+        val subject = if (name == null) "An anonymous pattern" else "Pattern `$name`"
+        return "$subject inside EXISTS shares no variable with the outer query or an earlier pattern of the block — " +
+            "a per-row scan is refused"
+    }
+
+    private fun unknownVariableDiagnostic(name: String, span: Span): QueryDiagnostic =
+        if (name in existsLocals) {
+            diag(QueryDiagnosticCodes.UNKNOWN_VARIABLE, "Variable `$name` is bound inside EXISTS and is not visible here", span)
+        } else {
+            diag(QueryDiagnosticCodes.UNKNOWN_VARIABLE, "Unknown variable `$name`", span, suggestion = suggest(name, bindings.keys))
+        }
 
     private fun validateOperand(operand: Operand) {
         if (operand !is Operand.Property) return
         val binding = bindings[operand.variable]
         when {
-            binding == null -> diagnostics += diag(
-                QueryDiagnosticCodes.UNKNOWN_VARIABLE,
-                "Unknown variable `${operand.variable}`",
-                operand.span,
-                suggestion = suggest(operand.variable, bindings.keys),
-            )
+            binding == null -> diagnostics += unknownVariableDiagnostic(operand.variable, operand.span)
             binding.kind == VariableKind.EDGE -> validateEdgeOperand(operand, binding)
             else -> validatePropertyKey(operand.key, binding.labels, operand.span)
         }
@@ -356,12 +395,7 @@ private class QueryValidation(private val schema: QuerySchema) {
         returns.names.forEach { name ->
             val binding = bindings[name]
             when {
-                binding == null -> diagnostics += diag(
-                    QueryDiagnosticCodes.UNKNOWN_VARIABLE,
-                    "Unknown variable `$name`",
-                    returns.span,
-                    suggestion = suggest(name, bindings.keys),
-                )
+                binding == null -> diagnostics += unknownVariableDiagnostic(name, returns.span)
                 binding.kind == VariableKind.EDGE -> diagnostics += diag(
                     QueryDiagnosticCodes.RELATIONSHIP_VARIABLE_REFERENCE,
                     "Relationship variable `$name` cannot be returned — relations carry no properties in Toadie",

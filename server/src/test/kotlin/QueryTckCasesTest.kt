@@ -22,8 +22,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * ~25 hand-transcribed openCypher TCK scenarios (`clauses/match`, `clauses/match-where`,
- * `expressions/comparison`, `expressions/string`, `expressions/null`, `expressions/boolean`),
+ * 30 hand-transcribed openCypher TCK scenarios (`clauses/match`, `clauses/match-where`,
+ * `expressions/comparison`, `expressions/string`, `expressions/null`, `expressions/boolean`,
+ * `expressions/existential` — the 2.36.0 `EXISTS { … }` predicate, TCK's `ExistentialSubqueries`),
  * rewritten to Toadie's accepted subset over ONE fixture graph — labels = fixture blueprints,
  * `RETURN` yields matched nodes only (no projections/aggregates, no TCK `.feature`/tabular
  * reader: this table format is the equivalent transcription).
@@ -241,6 +242,26 @@ class QueryTckCasesTest {
             "expressions/list/In1 — list membership",
             "MATCH (n:person) WHERE n.name IN ['Alice', 'Bob'] RETURN n",
             setOf(p("alice"), p("bob")),
+        ),
+        TckCase(
+            "expressions/existential/ExistentialSubquery1 — a simple existential subquery",
+            "MATCH (n:person) WHERE EXISTS { (n)-[:worksAt]->(c:company) } RETURN n",
+            setOf(p("alice"), p("bob"), p("carol")),
+        ),
+        TckCase(
+            "expressions/existential/ExistentialSubquery2 — NOT EXISTS is the exact complement",
+            "MATCH (n:person) WHERE NOT EXISTS { (n)-[:worksAt]->(c:company) } RETURN n",
+            setOf(p("dave")),
+        ),
+        TckCase(
+            "expressions/existential/ExistentialSubquery3 — an existential subquery with its own WHERE",
+            "MATCH (n:person) WHERE EXISTS { (n)-[:knows]->(m:person) WHERE m.age > 40 } RETURN n",
+            setOf(p("alice")),
+        ),
+        TckCase(
+            "expressions/existential/ExistentialSubquery4 — a chain correlated on both ends (pairs on a 3-cycle through b)",
+            "MATCH (a:person)-[:knows]->(b:person) WHERE EXISTS { (b)-[:knows]->(c:person)-[:knows]->(a) } RETURN a, b",
+            setOf(p("alice"), p("bob"), p("carol")),
         ),
     )
 

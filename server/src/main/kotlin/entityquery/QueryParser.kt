@@ -118,7 +118,7 @@ internal val REJECTED_KEYWORDS: List<String> = listOf(
 private val GRAMMAR_KEYWORDS: Set<String> = setOf(
     "MATCH", "OPTIONAL", "WHERE", "RETURN", "LIMIT", "DISTINCT",
     "AND", "OR", "NOT", "IN", "CONTAINS", "STARTS", "WITH", "ENDS",
-    "IS", "NULL", "TRUE", "FALSE", "AS",
+    "IS", "NULL", "TRUE", "FALSE", "AS", "EXISTS",
 )
 
 private val RESERVED_WORDS: Set<String> = (GRAMMAR_KEYWORDS + REJECTED_KEYWORDS).mapTo(mutableSetOf()) { it.uppercase() }
@@ -269,8 +269,8 @@ private fun limitInvalid(span: Span, message: String): QueryException = QueryExc
 )
 
 private fun validateCaps(matches: List<MatchClause>, optionals: List<MatchClause>) {
-    val all = matches + optionals
-    val nodeCount = all.sumOf { clause -> clause.patterns.sumOf { it.nodes.size } }
+    val all = (matches + optionals).flatMap { it.allPatterns() }
+    val nodeCount = all.sumOf { it.nodes.size }
     if (nodeCount > MAX_QUERY_NODE_PATTERNS) {
         throw QueryException(
             QueryDiagnostic(QueryDiagnosticCodes.TOO_MANY_PATTERNS, "Query has more than $MAX_QUERY_NODE_PATTERNS node patterns"),
@@ -284,13 +284,11 @@ private fun validateCaps(matches: List<MatchClause>, optionals: List<MatchClause
     }
 }
 
-private fun countDistinctVariables(clauses: List<MatchClause>): Int {
+private fun countDistinctVariables(patterns: List<Pattern>): Int {
     val variables = mutableSetOf<String>()
-    for (clause in clauses) {
-        for (pattern in clause.patterns) {
-            pattern.nodes.forEach { it.variable?.let(variables::add) }
-            pattern.edges.forEach { it.variable?.let(variables::add) }
-        }
+    for (pattern in patterns) {
+        pattern.nodes.forEach { it.variable?.let(variables::add) }
+        pattern.edges.forEach { it.variable?.let(variables::add) }
     }
     return variables.size
 }

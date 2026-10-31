@@ -72,7 +72,7 @@ Decisions, all taken 2026-09-12 and pinned here:
 - Positions are 1-based; a `Span(line, column, endLine, endColumn)` is end-exclusive. Every
   positioned diagnostic carries one.
 
-## Grammar (2.0.0)
+## Grammar (2.0.0; `EXISTS` 2.36.0)
 
 ```
 query          := matchClause+ optionalClause* returnClause limitClause? EOF
@@ -89,7 +89,8 @@ expression     := orExpr
 orExpr         := andExpr (OR andExpr)*
 andExpr        := notExpr (AND notExpr)*
 notExpr        := NOT notExpr | predicate
-predicate      := '(' expression ')' | operand comparison?                    -- bare operand: TRUE iff JSON true
+predicate      := EXISTS '{' pattern (',' pattern)* whereClause? '}'          -- existential predicate (2.36.0)
+               | '(' expression ')' | operand comparison?                    -- bare operand: TRUE iff JSON true
 comparison     := ('=' | '<>' | '!=' | '<' | '<=' | '>' | '>=') operand | IN operand | CONTAINS operand
                 | STARTS WITH operand | ENDS WITH operand | IS NULL | IS NOT NULL
 operand        := variable '.' propertyKey | literal              -- an EDGE variable's only operand is r.$tier (single-hop)
@@ -108,6 +109,7 @@ MATCH (s:service)-[:depends_on*1..3]->(d) RETURN s, d
 MATCH (c)-[:composition*]->(sys:system {$identifier: 'billing'}) RETURN c, sys
 MATCH (e)-[:$team]->(t:_team) WHERE e.lifecycle IN ['sunsetting', 'deprecated'] RETURN e, t
 MATCH (a:api) OPTIONAL MATCH (a)<-[:provides_api]-(s:service) RETURN a, s LIMIT 50
+MATCH (s:service)-[:consumes_apis]->(a:api) WHERE NOT EXISTS { (s)<-[:consumer]-(:api_adoption)-[:api]->(a) } RETURN s, a
 ```
 
 ## Rejected features — each a fixed `UNSUPPORTED` message
@@ -124,11 +126,17 @@ MATCH (a:api) OPTIONAL MATCH (a)<-[:provides_api]-(s:service) RETURN a, s LIMIT 
 | a plain `MATCH` after an `OPTIONAL MATCH` | `a plain MATCH after OPTIONAL MATCH is not supported — put every plain MATCH first` |
 | regex `=~` | a `SYNTAX` error at the operator (use `CONTAINS` / `STARTS WITH` / `ENDS WITH`) |
 | an edge variable in RETURN | `RELATIONSHIP_VARIABLE_REFERENCE` — `relations carry no properties in Toadie` |
+| `EXISTS` inside `EXISTS` (2.36.0) | `EXISTS inside EXISTS is not supported` |
+| a relationship variable inside `EXISTS` (2.36.0) | `a relationship variable inside EXISTS is not supported — leave the relationship anonymous` |
+| `EXISTS { MATCH … }` / `EXISTS { OPTIONAL MATCH … }` (2.36.0) | `EXISTS { MATCH … } is not supported — write the pattern directly: EXISTS { (a)-[:r]->(b) }` |
+| the `exists(x.p)` function — `EXISTS` followed by `(` (2.36.0) | `the exists() function is not supported — use IS NOT NULL for a property, EXISTS { … } for a pattern` |
+| a bare pattern predicate `WHERE (a)-[:r]->(b)` (2.36.0) | `a pattern predicate is not supported — wrap it as EXISTS { (a)-[:r]->(b) }` — recognised on the lookaheads `( :`, `( )`, `( IDENT :`, `( IDENT {` and `( IDENT ) -` / `<`, none of which starts a valid expression (`(a.x …` stays grouping) |
 | an edge variable in WHERE with any key but `$tier` (`r.name`, `r.$identifier`, `r.$fillTier`) | `RELATIONSHIP_VARIABLE_REFERENCE` — `only exposes $tier — relations carry no other properties in Toadie` (2.18.0) |
 | `r.$tier` on a variable-length edge (`-[r*1..3]->`) | `RELATIONSHIP_VARIABLE_REFERENCE` — `spans a variable-length hop — needs a single-hop relationship` (2.18.0) |
 
-Every reserved word (accepted or rejected) is refused as a variable or property name — backtick
-it if a blueprint really is called `` `order` ``.
+Every reserved word (accepted or rejected) is refused as a variable name — backtick
+it if a blueprint really is called `` `order` ``. `EXISTS` joined the reserved words in 2.36.0 (a
+blueprint really called `exists` is written `` `exists` ``); labels, property keys and edge types were never reserved.
 
 ## Semantics
 
@@ -196,6 +204,36 @@ on EITHER side; `CONTAINS`/`STARTS WITH`/`ENDS WITH` are string-only (UNKNOWN ot
 operand is TRUE only for JSON `true`. Inline property maps `{k: v}` are equality predicates.
 Expression nesting is capped at 64 levels (`MAX_EXPRESSION_DEPTH`, a `SYNTAX` error beyond).
 
+**Existential predicate (2.36.0).** `WHERE [NOT] EXISTS { pattern (, pattern)* [WHERE …] }` — `NOT` is
+the ordinary operator, so the positive form comes free. Rules, all pinned by tests:
+
+- *Two-valued.* TRUE when at least one binding of the block survives its own `WHERE` (kept iff
+  TRUE, so an UNKNOWN inner `WHERE` drops the candidate), else FALSE — never UNKNOWN, so
+  `NOT EXISTS` is the exact complement.
+- *Null anchor.* If any outer variable the block's PATTERNS name is null in the current binding
+  (an unmatched `OPTIONAL MATCH` slot) the block is FALSE — the rule `OPTIONAL MATCH` applies to its
+  own anchors — and `NOT EXISTS` is therefore TRUE for that binding.
+- *Scope.* The variables bound when the `WHERE` runs (its own clause's patterns and every earlier
+  clause's) are CORRELATED; any other node variable in the block is LOCAL: per candidate, discarded
+  with the block, invisible to `RETURN` and to any `WHERE` outside (`UNKNOWN_VARIABLE`, "bound inside
+  EXISTS"). Re-labelling an outer variable inside the block with a different label is the ordinary
+  `DUPLICATE_VARIABLE`; an inline map on an outer variable is a filter. A local's name is free again
+  for a later clause, and the same local name may appear in two blocks with different labels.
+- *Order rule.* Every block pattern, IN WRITTEN ORDER, must share a node variable with the outer
+  scope or with an earlier pattern of the same block; otherwise evaluation would be a per-row scan
+  of the workspace, and the validator refuses it with `DISCONNECTED_PATTERN` (positioned on the
+  offending pattern). The rule is what makes every block pattern ANCHORED: each one starts from an
+  already-bound node and expands through the incoming/outgoing/ownership indexes.
+- *Inside the block*: labelled, label-less and anonymous nodes, inline maps, `$team`, bare arrows,
+  hierarchy virtual edge types, `IN`/`OUT`/undirected edges and `*n..m` ranges (still capped by
+  `MAX_QUERY_HOPS`, same level-set BFS) work as in a `MATCH`. Relationship variables, nested
+  `EXISTS`, and a leading `MATCH` are refused at parse time (table above). A block may sit in the
+  `WHERE` of a plain `MATCH` or of an `OPTIONAL MATCH` (correlated to the optional's own variables).
+- *Short-circuit.* `AND` returns FALSE without evaluating its right side when the left is FALSE,
+  `OR` returns TRUE when the left is TRUE — identical to the Kleene tables, and it spares a block
+  for a binding already decided. **Tip: put the block LAST in a conjunction** (`WHERE s.lifecycle =
+  'production' AND NOT EXISTS { … }`).
+
 **Clauses.** Plain `MATCH` patterns are inner joins anchored on already-bound variables, else on
 the most constrained node (label + `$identifier` → one lookup; label + properties → a filtered
 blueprint scan; labels → the blueprint's rows; unlabelled → every row), expanding right and left
@@ -217,8 +255,8 @@ SET, never rows: two bindings of the same entity count once.
 | Cap | Value | Refusal |
 |---|---|---|
 | `MAX_QUERY_LENGTH` | 2000 characters | route-level plain `400` (`maxLength` in the contract); `QUERY_TOO_LONG` inside the engine |
-| `MAX_QUERY_NODE_PATTERNS` | 32 node patterns across every clause | `TOO_MANY_PATTERNS` |
-| `MAX_QUERY_VARIABLES` | 32 distinct node + edge variables | `TOO_MANY_VARIABLES` |
+| `MAX_QUERY_NODE_PATTERNS` | 32 node patterns across every clause, `EXISTS` blocks included (2.36.0) | `TOO_MANY_PATTERNS` |
+| `MAX_QUERY_VARIABLES` | 32 distinct node + edge variables, a block's locals included (2.36.0) | `TOO_MANY_VARIABLES` |
 | `MAX_QUERY_HOPS` | 10 (`*` alone = `1..10`; a larger explicit bound) | `RANGE_INVALID` |
 | `MAX_QUERY_BINDINGS` | 100 000 intermediate join rows, checked after EVERY produced row | `BINDING_LIMIT` |
 | `entityQuery.deadlineMillis` | `$ENTITY_QUERY_DEADLINE_MILLIS:2000`, boot-validated `1..60000` (`MAX_ENTITY_QUERY_DEADLINE_MILLIS`) | `DEADLINE_EXCEEDED` |
@@ -258,14 +296,20 @@ always the IDENTIFIER, and never embedded in `message`: the SPA renders "Did you
 from the field), `UNKNOWN_RELATION` (direction-aware, target-aware when both
 ends are labelled), `UNKNOWN_PROPERTY` (the label's `schema.properties` ∪ the nine metas; the
 union when unlabelled; suppressed when the label itself is unknown), `UNKNOWN_VARIABLE`,
-`DUPLICATE_VARIABLE` (re-bound with different labels, or as a different kind),
+`DUPLICATE_VARIABLE` (re-bound with different labels, or as a different kind — also an outer variable re-labelled inside an `EXISTS` block),
 `RELATIONSHIP_VARIABLE_REFERENCE` (an edge variable returned, read with any key but `$tier`, or
-`$tier` on a variable-length edge — three messages, one code), `RANGE_INVALID`, `LIMIT_INVALID`, `DISCONNECTED_PATTERN`,
+`$tier` on a variable-length edge — three messages, one code), `RANGE_INVALID`, `LIMIT_INVALID`, `DISCONNECTED_PATTERN` (also an uncorrelated `EXISTS` pattern),
 `TOO_MANY_PATTERNS`, `TOO_MANY_VARIABLES`, `QUERY_TOO_LONG`, and the three positionless
 evaluation refusals `DEADLINE_EXCEEDED`/`BINDING_LIMIT`/`WORKSPACE_TOO_LARGE` (2.4.0 — the
 combined shown-plus-lookup-target row set exceeds the process-wide entity read budget before any
 document is decoded; `.claude/docs/security.md` "Entity read memory budget"; a `ReadBudgetExceeded`
 whose `ownRequest` is false is a plain `429` instead, never this diagnostic).
+
+`EXISTS` (2.36.0) adds two MESSAGES and no code: ``Pattern `x` inside EXISTS shares no variable with the
+outer query or an earlier pattern of the block — a per-row scan is refused`` (``An anonymous pattern
+inside EXISTS …`` when it names no variable) under `DISCONNECTED_PATTERN`, and ``Variable `x` is bound
+inside EXISTS and is not visible here`` (no suggestion) under `UNKNOWN_VARIABLE`. The code count and
+the OpenAPI enum are unchanged, and the SPA renders the messages verbatim.
 
 ## API
 
@@ -298,7 +342,7 @@ its injected styles ride the existing `style-src 'unsafe-inline'`): `utils/query
 a `StreamLanguage` tokenizer for highlighting (no Lezer grammar build step), `utils/
 queryCompletion.ts` the schema-aware completion source (blueprints by title after `(v:`, relation
 keys ∪ hierarchy ids ∪ `$team` in an edge body, properties + the nine metas after `v.` (after a single-hop edge variable only `$tier`, after a variable-length one nothing — `EDGE_METAS`), `enum` values after
-`v.prop =`/`IN [`, clause keywords at clause starts, backticks via `quoteIfNeeded`), `utils/
+`v.prop =`/`IN [`, clause keywords at clause starts, backticks via `quoteIfNeeded`; `EXISTS` is highlighted as a keyword and, like every expression keyword, not offered as a completion), `utils/
 queryDiagnostics.ts` the server-diagnostic → lint-marker mapping; `components/QueryEditor.tsx`
 wraps the `EditorView`, `components/EntityQueryBar.tsx` adds Run (Mod+Enter), Clear and the
 diagnostics list; `hooks/useEntityQuery.ts` holds the ONE shared draft/applied pair plus the
@@ -399,6 +443,27 @@ its neighbours in a small `Hop` (a per-hop allocation, even for queries that nev
 tier); only a tier-referenced edge variable additionally keeps the `EdgeRef` and skips the
 dedupe by row, and that fan-out is still bounded by `MAX_QUERY_BINDINGS` after every produced row.
 
+**EXISTS cost (2.36.0).** A block is evaluated PER outer binding `B`, and by the order rule each of
+its patterns starts from a bound node, so it is never a workspace scan. The match is a
+DEPTH-FIRST walk across the block's patterns and hops: it stops at the first complete extension
+that passes the inner `WHERE` (the first complete extension when there is none), so a TRUE block
+never materialises the rest of its fan-out — `EXISTS { (h)-[:links]->(a)-[:links]->(b) }` over a
+hub with 400 × 400 extensions answers TRUE at the first. What is still built is ONE node's
+neighbour list at a time (bounded by its degree; a `*n..m` hop builds its level-set BFS result,
+bounded by the reachable edges), and each neighbour costs a deadline checkpoint even when the
+walk stops before using it. A block that finds nothing — every `NOT EXISTS` that holds — enumerates
+all its extensions, at most the product of the degrees along its patterns; EVERY surviving
+intermediate state (anchor rows and each hop's survivors, the way a plain `MATCH` counts its
+intermediate rows) is counted cumulatively per block evaluation against `MAX_QUERY_BINDINGS`
+(`BINDING_LIMIT`), so even a walk that dead-ends is refused quickly, alongside the deadline
+(`DEADLINE_EXCEEDED`). No new cap constant. The driving queries
+(`NOT EXISTS { (s)<-[:consumer]-(:api_adoption)-[:api]->(a) }`) anchor on `s`: `incoming(s)`
+filtered to the consumer relation, then `outgoing(adoption, api)` — O(|outer bindings|) overall.
+`QueryExistsScaleTest` proves it at the `MAX_ENTITIES_TOTAL` ceiling: the four sample shapes stay
+under 200 000 checkpoints on a deterministic ticking clock that charges 1 µs per checkpoint — at
+least ten times inside the 2 s budget (2 000 000 checkpoints) — and the real-clock run only logs
+elapsed time.
+
 **No snapshot cache in 2.0.0.** The documented trigger for adding one: a measured p95 above
 ~500 ms for `GET …/graph?query=` on the real workspace where the DB read + decode dominates →
 a version-stamped per-instance cache keyed on `(count, max(updated_at))` of the active rows.
@@ -428,7 +493,7 @@ case, hierarchy virtual edges across two blueprints with DIFFERENT keys, ownersh
 Inherited effective team, inline props, WHERE operators, joins, OPTIONAL null-keeping incl. a
 chain through a null slot, dedupe, LIMIT after dedupe, the binding cap, the deadline via an
 injected clock, caller cancellation propagating), `QueryEvaluatorScaleTest` (10k rows),
-`QueryTckCasesTest` (26 hand-transcribed openCypher TCK scenarios). Route-level, in
+`QueryTckCasesTest` (30 hand-transcribed openCypher TCK scenarios, 4 of them existential), `QueryExistsScaleTest` (2.36.0 — 9 795 rows; the sample shapes under a deterministic ticking clock, an adversarial `*1..10` block refused by the deadline, an uncorrelated block refused before evaluation; the parser/validator/evaluator `EXISTS` cases live in the files above: every UNSUPPORTED message, the order rule, scoping, null anchor, short-circuit, `BINDING_LIMIT`/`DEADLINE_EXCEEDED`/cancellation from inside a block). Route-level, in
 `EntityQueryRouteTest`:
 the query narrowing the graph under the both-ends rule, traversal THROUGH a hidden entity, `$team`
 with an Inherited team, a hierarchy virtual edge across two blueprints, `UNKNOWN_LABEL` with

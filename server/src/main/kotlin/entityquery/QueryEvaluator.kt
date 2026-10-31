@@ -2,6 +2,7 @@ package ch.nokillswit.entityquery
 
 import ch.nokillswit.entities.GraphBlueprint
 import kotlinx.serialization.json.JsonPrimitive
+import java.util.IdentityHashMap
 
 /**
  * The entity query language's evaluator (`.claude/docs/entity-query-language.md`, "Evaluation
@@ -61,14 +62,20 @@ internal suspend fun runEntityQuery(
 internal class InMemoryQueryExecutor : QueryExecutor {
     override suspend fun execute(query: Query, slots: VariableSlots, graph: QueryGraph, budget: QueryBudget): QueryResult {
         var bindings: List<Binding> = listOf(Binding(arrayOfNulls(slots.nodes.size), arrayOfNulls(slots.edges.size)))
-        query.matches.forEach { clause -> bindings = matchClauseBindings(clause, bindings, slots, graph, budget) }
-        // Variables introduced by the clauses processed so far: an OPTIONAL MATCH that names one
-        // of them must anchor on THAT binding — a null slot (an earlier optional found nothing)
-        // means "cannot match", never "scan the workspace for a fresh row".
-        val introduced = query.matches.flatMap { it.patterns }.flatMap { it.nodes }.mapNotNull { it.variable }.toMutableSet()
+        // Node variables introduced by the clauses processed so far — clause patterns only, NEVER an
+        // EXISTS block's locals. An OPTIONAL MATCH that names one of them must anchor on THAT
+        // binding (a null slot — an earlier optional found nothing — means "cannot match", never
+        // "scan the workspace for a fresh row"), and a WHERE's EXISTS blocks correlate on exactly
+        // the variables in scope (this clause's own patterns included).
+        val introduced = mutableSetOf<String>()
+        query.matches.forEach { clause ->
+            introduced += clause.nodeVariables()
+            bindings = matchClauseBindings(clause, bindings, slots, graph, budget, introduced)
+        }
         query.optionals.forEach { clause ->
-            bindings = applyOptional(clause, bindings, slots, graph, budget, introduced)
-            introduced += clause.patterns.flatMap { it.nodes }.mapNotNull { it.variable }
+            val introducedBefore = introduced.toSet()
+            introduced += clause.nodeVariables()
+            bindings = applyOptional(clause, bindings, slots, graph, budget, introducedBefore, introduced)
         }
 
         val slotIndices = returnedSlotIndices(query.returns, slots)
@@ -79,6 +86,12 @@ internal class InMemoryQueryExecutor : QueryExecutor {
     }
 }
 
+private fun MatchClause.nodeVariables(): List<String> = patterns.flatMap { it.nodes }.mapNotNull { it.variable }
+
+// `RETURN *` reads every node slot, EXISTS-block locals included: that is safe because block work
+// happens in a COPY of the outer binding (matchPattern copies), so a block-local slot is always
+// null in the bindings that reach RETURN — unless a later clause binds the same name, which is
+// then an ordinary variable.
 private fun returnedSlotIndices(returns: Returns, slots: VariableSlots): List<Int> = when (returns) {
     is Returns.All -> slots.nodes.values.toList()
     is Returns.Variables -> returns.names.mapNotNull { slots.nodes[it] }
@@ -94,6 +107,7 @@ private suspend fun matchClauseBindings(
     slots: VariableSlots,
     graph: QueryGraph,
     budget: QueryBudget,
+    scope: Set<String>,
 ): List<Binding> {
     var bindings = bindingsIn
     for (pattern in clause.patterns) {
@@ -104,11 +118,8 @@ private suspend fun matchClauseBindings(
         }
         bindings = next
     }
-    val where = clause.where ?: return bindings
-    return bindings.filter { b ->
-        budget.checkpoint()
-        evaluate(where, lookupOf(b, slots)) == Truth.TRUE
-    }
+    val where = clause.where?.let { WhereEvaluator(it, slots, graph, budget, scope) } ?: return bindings
+    return bindings.filter { where.holds(it) }
 }
 
 private suspend fun applyOptional(
@@ -118,13 +129,15 @@ private suspend fun applyOptional(
     graph: QueryGraph,
     budget: QueryBudget,
     introducedBefore: Set<String>,
+    scope: Set<String>,
 ): List<Binding> {
+    val where = clause.where?.let { WhereEvaluator(it, slots, graph, budget, scope) }
     val anchoredSlots = clause.patterns.flatMap { it.nodes }.mapNotNull { it.variable }
         .filter { it in introducedBefore }.mapNotNull { slots.nodes[it] }.toSet()
     val result = mutableListOf<Binding>()
     for (b in bindingsIn) {
         val nullAnchor = anchoredSlots.any { b.nodes[it] == null }
-        val extensions = if (nullAnchor) emptyList() else optionalExtensions(clause, b, slots, graph, budget)
+        val extensions = if (nullAnchor) emptyList() else optionalExtensions(clause, b, slots, graph, budget, where)
         if (extensions.isEmpty()) result += b else result += extensions
         budget.countBindings(result.size)
     }
@@ -137,6 +150,7 @@ private suspend fun optionalExtensions(
     slots: VariableSlots,
     graph: QueryGraph,
     budget: QueryBudget,
+    where: WhereEvaluator?,
 ): List<Binding> {
     var extended = listOf(binding)
     for (pattern in clause.patterns) {
@@ -144,10 +158,114 @@ private suspend fun optionalExtensions(
         for (e in extended) next += matchPattern(pattern, e, slots, graph, budget)
         extended = next
     }
-    val where = clause.where ?: return extended
-    return extended.filter { e ->
+    return if (where == null) extended else extended.filter { where.holds(it) }
+}
+
+/**
+ * One clause's WHERE (2.36.0): [holds] keeps a binding iff the expression is TRUE, answering each
+ * `EXISTS { … }` block by extending THE BINDING under test with the block's patterns. The slots a
+ * block correlates on (the node variables its patterns name that are in [scope]) are computed once
+ * per clause — keyed by identity, because [Expr.Exists] is a data class and hashing it per binding
+ * would walk its whole subtree.
+ */
+private class WhereEvaluator(
+    private val where: Expr,
+    private val slots: VariableSlots,
+    private val graph: QueryGraph,
+    private val budget: QueryBudget,
+    scope: Set<String>,
+) {
+    private val correlated = IdentityHashMap<Expr.Exists, IntArray>().also { map ->
+        where.existsBlocks().forEach { block ->
+            val names = block.patterns.flatMap { it.nodes }.mapNotNull { it.variable }.filter { it in scope }
+            map[block] = names.mapNotNull { slots.nodes[it] }.distinct().toIntArray()
+        }
+    }
+
+    suspend fun holds(binding: Binding): Boolean {
         budget.checkpoint()
-        evaluate(where, lookupOf(e, slots)) == Truth.TRUE
+        return truthOf(where, binding) == Truth.TRUE
+    }
+
+    private suspend fun truthOf(expr: Expr, binding: Binding): Truth =
+        evaluate(expr, lookupOf(binding, slots)) { block -> existsTruth(block, binding) }
+
+    /**
+     * TWO-valued: TRUE iff at least one extension of [binding] by every block pattern, in written
+     * order, survives the block's own WHERE (kept iff TRUE, so UNKNOWN drops the candidate); FALSE
+     * otherwise — never UNKNOWN, so `NOT EXISTS` is the exact complement. A correlated variable
+     * that is null in [binding] (an unmatched OPTIONAL MATCH slot) makes the block FALSE, the rule
+     * `applyOptional` applies to its own anchors. The validator's order rule guarantees every
+     * pattern shares a variable already bound here, so each one is anchored, never scanned.
+     *
+     * The match is a DEPTH-FIRST walk across the block's patterns and hops: it stops at the first
+     * complete extension that passes the inner WHERE (or the first complete extension when there is
+     * none), so a TRUE block never materialises the rest of its fan-out. What is still built is one
+     * node's neighbour list at a time (bounded by its degree, or by the reachable set for a `*n..m`
+     * hop). A block that finds nothing enumerates every extension, so EVERY surviving intermediate
+     * state (anchor rows and each hop's survivors, like a plain MATCH's intermediate rows) is
+     * counted cumulatively per block evaluation against `MAX_QUERY_BINDINGS`, next to the per-step
+     * deadline checkpoints.
+     */
+    private suspend fun existsTruth(block: Expr.Exists, binding: Binding): Truth {
+        if (correlated.getValue(block).any { binding.nodes[it] == null }) return Truth.FALSE
+        return if (matchBlock(block, 0, binding, IntArray(1))) Truth.TRUE else Truth.FALSE
+    }
+
+    /** Pattern [index] of [block] and everything after it, extending [binding]; [visited] counts every surviving state of the block. */
+    private suspend fun matchBlock(block: Expr.Exists, index: Int, binding: Binding, visited: IntArray): Boolean {
+        if (index == block.patterns.size) {
+            val inner = block.where ?: return true
+            budget.checkpoint()
+            return truthOf(inner, binding) == Truth.TRUE
+        }
+        return walkPattern(block.patterns[index], binding, visited) { next -> matchBlock(block, index + 1, next, visited) }
+    }
+
+    /** Every extension of [binding] by [pattern] (anchor first, then right of it, then left), handed to [onMatch] until it answers true. */
+    private suspend fun walkPattern(
+        pattern: Pattern,
+        binding: Binding,
+        visited: IntArray,
+        onMatch: suspend (Binding) -> Boolean,
+    ): Boolean {
+        val anchorIndex = chooseAnchorIndex(pattern, binding, slots)
+        val anchorNode = pattern.nodes[anchorIndex]
+        val anchorExisting = anchorNode.variable?.let { v -> slots.nodes[v]?.let { binding.nodes[it] } }
+        val steps = (anchorIndex until pattern.edges.size).map { it to it + 1 } +
+            (anchorIndex - 1 downTo 0).map { it + 1 to it }
+        for (row in candidatesForNode(anchorNode, anchorExisting, graph)) {
+            budget.checkpoint()
+            val start = binding.copy()
+            if (!tryAssign(start, anchorNode.variable, row, slots)) continue
+            budget.countBindings(++visited[0])
+            val positions = arrayOfNulls<QueryRow?>(pattern.nodes.size)
+            positions[anchorIndex] = row
+            if (walkSteps(pattern, steps, 0, start to positions, visited, onMatch)) return true
+        }
+        return false
+    }
+
+    private suspend fun walkSteps(
+        pattern: Pattern,
+        steps: List<Pair<Int, Int>>,
+        stepIndex: Int,
+        state: PatternState,
+        visited: IntArray,
+        onMatch: suspend (Binding) -> Boolean,
+    ): Boolean {
+        if (stepIndex == steps.size) return onMatch(state.first)
+        val (knownPos, unknownPos) = steps[stepIndex]
+        val edge = pattern.edges[minOf(knownPos, unknownPos)]
+        val edgeSlot = edge.variable?.let { slots.edges[it] }
+        val knownRow = state.second[knownPos] ?: return false
+        for (hop in neighborsFor(knownRow, edge, knownPos < unknownPos, edgeSlot != null, graph, budget)) {
+            budget.checkpoint()
+            val next = extend(state, unknownPos, pattern.nodes[unknownPos], hop, edgeSlot, slots) ?: continue
+            budget.countBindings(++visited[0])
+            if (walkSteps(pattern, steps, stepIndex + 1, next, visited, onMatch)) return true
+        }
+        return false
     }
 }
 
@@ -284,21 +402,38 @@ private suspend fun expandOneHop(
     val results = mutableListOf<PatternState>()
     for ((bnd, pos) in current) {
         val knownRow = pos[knownPos] ?: continue
-        for ((candidate, edgeRef) in neighborsFor(knownRow, edge, knownIsLeft, edgeSlot != null, graph, budget)) {
+        for (hop in neighborsFor(knownRow, edge, knownIsLeft, edgeSlot != null, graph, budget)) {
             budget.checkpoint()
-            if (!matchesLabels(unknownNode, candidate) || !matchesNodeProperties(unknownNode, candidate)) continue
-            val newBinding = bnd.copy()
-            if (!tryAssign(newBinding, unknownNode.variable, candidate, slots)) continue
-            if (edgeSlot != null) newBinding.edges[edgeSlot] = edgeRef
-            val newPos = pos.copyOf()
-            newPos[unknownPos] = candidate
-            results += newBinding to newPos
+            results += extend(bnd to pos, unknownPos, unknownNode, hop, edgeSlot, slots) ?: continue
             // Checked per produced row, not per finished hop: one dense hop (1000 rows × a
             // 1000-wide `many` relation) would otherwise materialize far past the cap first.
             budget.countBindings(results.size)
         }
     }
     return results
+}
+
+/**
+ * [state] extended by one hop to [hop]'s row at [unknownPos], or null when the row fails the node's
+ * labels/inline properties or contradicts a variable the binding already holds. Shared by the
+ * materialising [expandOneHop] (plain MATCH) and the depth-first EXISTS walk.
+ */
+private fun extend(
+    state: PatternState,
+    unknownPos: Int,
+    unknownNode: NodePattern,
+    hop: Hop,
+    edgeSlot: Int?,
+    slots: VariableSlots,
+): PatternState? {
+    val (candidate, edgeRef) = hop
+    if (!matchesLabels(unknownNode, candidate) || !matchesNodeProperties(unknownNode, candidate)) return null
+    val newBinding = state.first.copy()
+    if (!tryAssign(newBinding, unknownNode.variable, candidate, slots)) return null
+    if (edgeSlot != null) newBinding.edges[edgeSlot] = edgeRef
+    val newPos = state.second.copyOf()
+    newPos[unknownPos] = candidate
+    return newBinding to newPos
 }
 
 /**
