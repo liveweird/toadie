@@ -161,6 +161,9 @@ class SampleQueriesTest {
                 "resource/payments-db", "resource/ledger-log", "resource/settlement-warehouse",
                 "_team/platform-tribe", "_team/payments-squad",
             ),
+            "09-workloads-outside-cluster-environment.json" to setOf(
+                "workload/live-cart-gateway-test", "cluster/staging-k8s", "environment/staging", "environment/test",
+            ),
         )
 
 
@@ -176,6 +179,7 @@ class SampleQueriesTest {
             "06-pci-dss-scope.json" to mapOf("api" to 2, "dataset" to 2, "resource" to 3, "service" to 3, "system" to 1),
             "07-dora-critical-functions.json" to mapOf("_team" to 2, "resource" to 3, "service" to 3, "system" to 1),
             "08-banking-outsourcing-scope.json" to mapOf("api" to 2, "dataset" to 2, "resource" to 3, "service" to 3, "system" to 2),
+            "09-workloads-outside-cluster-environment.json" to mapOf("cluster" to 1, "environment" to 2, "workload" to 1),
         )
     }
 }

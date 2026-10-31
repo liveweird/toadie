@@ -22,7 +22,7 @@ export const KIND_TIERS: Record<EntityKind, KindTier> = {
   System: 1,
   Group: 1,
   Component: 2,
-  Resource: 3,
+  Resource: 2,
   API: 3,
   User: 4,
 };

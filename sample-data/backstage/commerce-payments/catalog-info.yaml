@@ -9,13 +9,14 @@
 # findings (each marked "on purpose" below). To regenerate after a change to the Port sample or the mapping,
 # follow "Regenerating this file" in README.md, then restore those three edits by hand.
 #
-# Every value in this file comes from the ADMIN-curated registries seeded by V22:
-# the two namespaces, the four lifecycles, each kind's type dictionary, the eleven
+# Every value in this file comes from the ADMIN-curated registries seeded by V22 (the System types re-curated by V50):
+# the default namespace, the four lifecycles, each kind's type dictionary, the eleven
 # label keys with their closed value lists, the four tag categories, and the four
 # annotation keys. Registry values are valid, but four deliberate reference findings
 # in catalog-service and legacy-invoicing require the import waiver; see README.md.
 #
-# Between them the documents use every seeded type value, which makes the editor's
+# Between them the documents use every seeded type value (bar three of the six System
+# types — the sample has only five systems), which makes the editor's
 # registry-backed Type/Lifecycle/Label/Tag/Annotation pickers checkable without inventing
 # anything the registries would reject.
 #
@@ -42,8 +43,8 @@ metadata:
   title: Platform Tribe
   description: Owns the shared platform; the payments squad reports into it.
   links:
-    - url: https://acme.slack.com/archives/platform-tribe
-      title: Slack channel
+    - url: https://teams.acme.example.com/channels/platform-tribe
+      title: Teams channel
       icon: chat
     - url: https://wiki.example.com/platform-tribe
       title: Tribe wiki
@@ -65,8 +66,8 @@ metadata:
   title: Retail Tribe
   description: Owns the storefront system end to end.
   links:
-    - url: https://acme.slack.com/archives/retail-tribe
-      title: Slack channel
+    - url: https://teams.acme.example.com/channels/retail-tribe
+      title: Teams channel
       icon: chat
 spec:
   type: org-unit
@@ -86,8 +87,8 @@ metadata:
   title: Payments Squad
   description: Owns the payments capability. Part of the Platform Tribe.
   links:
-    - url: https://acme.slack.com/archives/payments-squad
-      title: Slack channel
+    - url: https://teams.acme.example.com/channels/payments-squad
+      title: Teams channel
       icon: chat
 spec:
   type: team
@@ -218,9 +219,10 @@ spec:
   owner: group:default/payments-squad
 ---
 # ---------------------------------------------------------------------------
-# Systems — spec.type product/capability. criticality-tier and support-mode are
-# System-only labels; no tags and no lifecycle exist for this kind. A Port system
-# flagged external lands in the `external` namespace.
+# Systems — spec.type from the six-value taxonomy (value-creation, shared-service, integration,
+# data-and-reporting, infrastructure-and-platform, external). criticality-tier and support-mode are
+# System-only labels; no tags and no lifecycle exist for this kind. A third party's system is the
+# type `external`; every document lives in the default namespace.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: System
@@ -241,7 +243,7 @@ metadata:
     - url: https://shop.example.com
       title: Production storefront
 spec:
-  type: product
+  type: value-creation
   owner: group:default/retail-tribe
   domain: domain:default/commerce
 ---
@@ -260,7 +262,7 @@ metadata:
   annotations:
     backstage.io/kubernetes-id: payments
 spec:
-  type: capability
+  type: value-creation
   owner: group:default/payments-squad
   domain: domain:default/payments
 ---
@@ -268,9 +270,9 @@ apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
   name: acquirer
-  namespace: external
+  namespace: default
   title: Acquirer (third party)
-  description: The card acquirer we authorise against. Lives in the `external` namespace — we model it because we depend on it, but we do not own or run it.
+  description: The card acquirer we authorise against. A third-party system, typed `external` — we model it because we depend on it, but we do not own or run it.
   labels:
     criticality-tier: critical
     support-mode: business-hours
@@ -279,7 +281,7 @@ metadata:
     - url: https://status.acquirer.example.com
       title: Acquirer status page
 spec:
-  type: capability
+  type: external
   owner: group:default/payments-squad
 ---
 apiVersion: backstage.io/v1alpha1
@@ -295,7 +297,7 @@ metadata:
     exposure: internal
     hosting-model: on-premise
 spec:
-  type: capability
+  type: value-creation
   owner: group:default/payments-squad
   domain: domain:default/back-office
 ---
@@ -314,7 +316,7 @@ metadata:
   annotations:
     backstage.io/techdocs-ref: url:https://docs.example.com/systems/developer-portal
 spec:
-  type: product
+  type: infrastructure-and-platform
   owner: group:default/platform-tribe
   domain: domain:default/platform
 ---
@@ -558,6 +560,8 @@ metadata:
     - url: https://runbooks.example.com/payments-gateway
       title: Runbook
       icon: docs
+    - url: https://oncall.acme.example.com/rotas/payments-squad
+      title: On-call
 spec:
   type: service
   lifecycle: production
@@ -566,7 +570,7 @@ spec:
   providesApis:
     - api:default/payments-grpc
   consumesApis:
-    - api:external/acquirer-rest
+    - api:default/acquirer-rest
   dependsOn:
     - resource:default/payments-db
     - component:default/payments-sdk
@@ -756,7 +760,8 @@ spec:
 ---
 # ---------------------------------------------------------------------------
 # APIs — spec.type openapi/asyncapi/graphql/grpc/web-sockets, lifecycle, and a
-# required spec.definition. No tags exist for this kind.
+# required spec.definition (a placeholder: the Port API stores no definition document,
+# definition-at-location points at it). No tags exist for this kind.
 # ---------------------------------------------------------------------------
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -779,18 +784,7 @@ spec:
   lifecycle: production
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |-
-    type Product {
-      sku: ID!
-      title: String!
-      priceMinor: Int!
-      available: Boolean!
-    }
-
-    type Query {
-      product(sku: ID!): Product
-      products(category: String, first: Int = 20): [Product!]!
-    }
+  definition: "# no definition recorded"
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -813,20 +807,7 @@ spec:
   lifecycle: production
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |-
-    openapi: 3.0.3
-    info:
-      title: Checkout REST API
-      version: 2.0.0
-    paths:
-      /carts/{cartId}/checkout:
-        post:
-          summary: Convert a cart into an order
-          responses:
-            "201":
-              description: Order created
-            "409":
-              description: Cart already checked out
+  definition: "# no definition recorded"
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -848,11 +829,7 @@ spec:
   lifecycle: experimental
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |-
-    # Frames are newline-delimited JSON, client-initiated subscribe then server push.
-    -> {"op":"subscribe","cartId":"c_123"}
-    <- {"op":"cart.updated","cartId":"c_123","lines":3,"totalMinor":8940}
-    <- {"op":"stock.changed","sku":"SKU-9","available":false}
+  definition: "# no definition recorded"
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -872,20 +849,7 @@ spec:
   lifecycle: experimental
   owner: group:default/retail-tribe
   system: system:default/storefront
-  definition: |-
-    asyncapi: 2.6.0
-    info:
-      title: Order events
-      version: 0.4.0
-    channels:
-      order.placed:
-        subscribe:
-          message:
-            payload:
-              type: object
-              properties:
-                orderId: { type: string }
-                totalMinor: { type: integer }
+  definition: "# no definition recorded"
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
@@ -908,29 +872,13 @@ spec:
   lifecycle: production
   owner: group:default/payments-squad
   system: system:default/payments
-  definition: |-
-    syntax = "proto3";
-    package acme.payments.v1;
-
-    service Payments {
-      rpc Authorize(AuthorizeRequest) returns (AuthorizeResponse);
-      rpc Capture(CaptureRequest) returns (CaptureResponse);
-    }
-
-    message AuthorizeRequest {
-      string order_id = 1;
-      int64 amount_minor = 2;
-      string currency = 3;
-    }
-    message AuthorizeResponse { string authorization_id = 1; }
-    message CaptureRequest { string authorization_id = 1; }
-    message CaptureResponse { bool captured = 1; }
+  definition: "# no definition recorded"
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API
 metadata:
   name: acquirer-rest
-  namespace: external
+  namespace: default
   title: Acquirer REST API (third party)
   description: The acquirer's authorisation endpoint. We consume it; we do not own it.
   labels:
@@ -944,21 +892,8 @@ spec:
   type: openapi
   lifecycle: production
   owner: group:default/payments-squad
-  system: system:external/acquirer
-  definition: |-
-    openapi: 3.0.3
-    info:
-      title: Acquirer Authorisation API
-      version: 1.0.0
-    paths:
-      /authorizations:
-        post:
-          summary: Authorise a card payment
-          responses:
-            "201":
-              description: Authorised
-            "402":
-              description: Declined
+  system: system:default/acquirer
+  definition: "# no definition recorded"
 ---
 # ---------------------------------------------------------------------------
 # Resources — spec.type database/message-broker/transaction-log/

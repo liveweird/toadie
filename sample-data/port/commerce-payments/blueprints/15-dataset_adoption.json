@@ -4,6 +4,11 @@
   "description": "A declared consumption of a dataset by a service on a specific contract version — the versioned twin of service.consumes_datasets, which only says THAT a service consumes a dataset. A relation entity like workload, since Port relations carry no properties. Declared, never observed: it records what a team states it runs and who verified it when; runtime evidence lives outside Toadie. Convention: the dataset should be among the consumer's consumes_datasets (not validated). Port-only.",
   "icon": "Link",
   "hierarchyRelations": {"composition": "consumer"},
+  "tiers": {
+    "blueprint": 3,
+    "properties": { "contract_version": 1 },
+    "relations": { "consumer": 1, "dataset": 1 }
+  },
   "schema": {
     "properties": {
       "contract_version": {

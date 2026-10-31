@@ -183,6 +183,7 @@
       "dashboard": "https://grafana.example.com/d/payments-gateway",
       "logs": "https://logs.example.com/app/payments-gateway",
       "runbook": "https://runbooks.example.com/payments-gateway",
+      "oncall_schedule": "https://oncall.acme.example.com/rotas/payments-squad",
       "kubernetes_id": "payments-gateway"
     },
     "relations": {

@@ -1,17 +1,22 @@
 {
   "identifier": "product",
   "title": "Product",
-  "description": "The commercial offering — what customers buy, use and see on the roadmap and the status page: a SaaS application, an API product, an add-on, a platform, or an internal tool with internal customers. Delivered by one or more systems (system.products); its stage is the COMMERCIAL lifecycle, distinct from the technical lifecycle on services. Port-only: Backstage has no Product kind, so an export drops it.",
+  "description": "The commercial offering — what customers buy, use and see on the roadmap and the status page: a SaaS application, an API product, an add-on, a platform, or an internal tool with internal customers. Delivered by one or more systems (system.products); its stage is the COMMERCIAL lifecycle, distinct from the technical lifecycle on services. Port-only: Backstage has no Product kind, so an export drops it. service_count counts every service of every system that lists this product, so a system shared by several products counts its services for each of them (the sum over products exceeds the number of services).",
   "icon": "Package",
   "hierarchyRelations": {"composition": "parent_product"},
+  "tiers": {
+    "blueprint": 2,
+    "properties": { "type": 1, "stage": 2 },
+    "relations": { "parent_product": 1, "depends_on": 2 }
+  },
   "schema": {
     "properties": {
       "type": {
         "type": "string",
         "title": "Type",
         "description": "What kind of commercial offering this is.",
-        "enum": ["application", "platform", "api-product", "add-on", "internal-tool"],
-        "enumColors": { "application": "blue", "platform": "purple", "api-product": "turquoise", "add-on": "orange", "internal-tool": "lightGray" }
+        "enum": ["payment-product", "non-payment-product"],
+        "enumColors": { "payment-product": "blue", "non-payment-product": "turquoise" }
       },
       "stage": {
         "type": "string",
@@ -24,24 +29,8 @@
         "type": "array",
         "title": "Segment",
         "description": "The customer segments this product targets.",
-        "items": {
-          "type": "string",
-          "enum": ["enterprise", "mid-market", "smb", "consumer", "developer", "internal"],
-          "enumColors": {"enterprise": "purple", "mid-market": "blue", "smb": "turquoise", "consumer": "green", "developer": "orange", "internal": "lightGray"}
-        },
+        "items": { "type": "string" },
         "uniqueItems": true
-      },
-      "delivery_model": {
-        "type": "string",
-        "title": "Delivery model",
-        "enum": ["saas", "self-hosted", "hybrid"],
-        "enumColors": { "saas": "blue", "self-hosted": "bronze", "hybrid": "purple" }
-      },
-      "pricing_model": {
-        "type": "string",
-        "title": "Pricing model",
-        "enum": ["subscription", "usage-based", "freemium", "enterprise-contract", "free"],
-        "enumColors": { "subscription": "green", "usage-based": "turquoise", "freemium": "yellow", "enterprise-contract": "blue", "free": "lightGray" }
       },
       "sla": {
         "type": "number",
@@ -49,17 +38,6 @@
         "description": "The availability commitment made to customers (systems carry the internal counterpart: criticality/support_mode).",
         "enum": [99.9, 99.95, 99.99],
         "enumColors": {"99.9": "yellow", "99.95": "green", "99.99": "turquoise"}
-      },
-      "regions": {
-        "type": "array",
-        "title": "Regions",
-        "description": "Where this product is available.",
-        "items": {
-          "type": "string",
-          "enum": ["eu", "us", "apac"],
-          "enumColors": {"eu": "blue", "us": "purple", "apac": "orange"}
-        },
-        "uniqueItems": true
       },
       "launched_on": {
         "type": "string",

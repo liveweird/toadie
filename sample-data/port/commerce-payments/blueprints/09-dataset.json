@@ -1,9 +1,14 @@
 {
   "identifier": "dataset",
   "title": "Dataset",
-  "description": "A named, contract-bearing set of data a store holds — the data-side interface surface, the way `api` is the request-side one. An ODCS contract (kept outside Toadie) describes one or more datasets; Toadie records that the dataset exists, where it is stored, and which services produce and consume it (service.produces_datasets / consumes_datasets). Port-only: Backstage has no Dataset kind, so an export drops it.",
+  "description": "A named, contract-bearing set of data a store holds — the data-side interface surface, the way `api` is the request-side one. An ODCS contract (kept outside Toadie) describes one or more datasets; Toadie records that the dataset exists, where it is stored, and which services produce and consume it (service.produces_datasets / consumes_datasets). Port-only: Backstage has no Dataset kind, so an export drops it. Consumption is recorded twice on purpose: service.consumes_datasets says THAT a service reads it, dataset_adoption says WHICH contract version and with what status — adoption_count counts the declarations; nothing checks the two agree.",
   "icon": "Table",
   "hierarchyRelations": {"composition": "system"},
+  "tiers": {
+    "blueprint": 3,
+    "properties": { "type": 1, "lifecycle": 2, "data_classification": 3, "gdpr": 3, "pci_dss": 3, "banking_outsourcing": 3 },
+    "relations": { "system": 1 }
+  },
   "schema": {
     "properties": {
       "type": {
@@ -20,9 +25,9 @@
         "enum": ["experimental", "production", "sunsetting", "deprecated"],
         "enumColors": { "experimental": "paleBlue", "production": "green", "sunsetting": "orange", "deprecated": "red" }
       },
-      "classification": {
+      "data_classification": {
         "type": "string",
-        "title": "Classification",
+        "title": "Data classification",
         "description": "The dataset's own classification; a store's data_classification is the store-wide maximum.",
         "enum": ["public", "internal", "confidential", "restricted"],
         "enumColors": { "public": "green", "internal": "blue", "confidential": "orange", "restricted": "red" }
@@ -41,18 +46,6 @@
         "type": "boolean",
         "title": "Banking outsourcing",
         "description": "Holds data covered by the outsourcing of banking activities (KNF; Polish Banking Law art. 6a-6d). Port-only: no Backstage Dataset kind, no label."
-      },
-      "freshness": {
-        "type": "string",
-        "title": "Freshness",
-        "description": "How stale a consumer may find it.",
-        "enum": ["real-time", "hourly", "daily", "weekly"],
-        "enumColors": { "real-time": "green", "hourly": "turquoise", "daily": "blue", "weekly": "lightGray" }
-      },
-      "retention_days": {
-        "type": "number",
-        "title": "Retention (days)",
-        "description": "Days a record is kept before deletion or archival."
       },
       "contract_url": {
         "type": "string",
@@ -95,14 +88,6 @@
       "calculationSpec": { "calculationBy": "entities", "func": "count" },
       "pathFilter": [
         { "fromBlueprint": "service", "path": ["produces_datasets"] }
-      ]
-    },
-    "consumer_count": {
-      "title": "Consumer count",
-      "target": "service",
-      "calculationSpec": { "calculationBy": "entities", "func": "count" },
-      "pathFilter": [
-        { "fromBlueprint": "service", "path": ["consumes_datasets"] }
       ]
     },
     "adoption_count": {

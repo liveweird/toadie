@@ -68,7 +68,7 @@
       "health": "unhealthy",
       "last_deployed": "2026-09-10T11:20:00Z"
     },
-    "relations": { "service": "live-cart-gateway", "environment": "test", "cluster": "test-k8s" }
+    "relations": { "service": "live-cart-gateway", "environment": "test", "cluster": "staging-k8s" }
   },
   {
     "blueprint": "workload",

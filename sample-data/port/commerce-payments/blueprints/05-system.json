@@ -4,6 +4,11 @@
   "description": "A set of services, APIs and resources that together deliver one or more products or a shared capability — the unit whose criticality and support mode are agreed with the business. Backstage kind: System (domain → spec.domain, the team field → spec.owner; criticality/support_mode/exposure/hosting_model → the labels of the same name).",
   "icon": "Box",
   "hierarchyRelations": {"composition": "domain"},
+  "tiers": {
+    "blueprint": 1,
+    "properties": { "description": 1, "type": 1, "criticality": 2, "support_mode": 2, "exposure": 3, "hosting_model": 3 },
+    "relations": { "domain": 1, "products": 2 }
+  },
   "schema": {
     "properties": {
       "description": {
@@ -14,9 +19,9 @@
       "type": {
         "type": "string",
         "title": "Type",
-        "description": "The System type dictionary: product = a system that on its own realises a customer-facing offering listed under Products; capability = a building block shared by several products.",
-        "enum": ["product", "capability"],
-        "enumColors": { "product": "blue", "capability": "turquoise" }
+        "description": "The System type dictionary: value-creation = a system that on its own realises a customer-facing offering listed under Products; shared-service = a building block shared by several products; integration = communication & real-time information exchange; data-and-reporting = analytical & mgmt systems; infrastructure-and-platform = underlying, lower-level basic & universal services; external = provided by 3rd party.",
+        "enum": ["value-creation", "shared-service", "integration", "data-and-reporting", "infrastructure-and-platform", "external"],
+        "enumColors": { "value-creation": "blue", "shared-service": "turquoise", "integration": "orange", "data-and-reporting": "purple", "infrastructure-and-platform": "pink", "external": "yellow" }
       },
       "criticality": {
         "type": "string",
@@ -45,12 +50,6 @@
         "description": "Label hosting-model.",
         "enum": ["public-cloud", "on-premise"],
         "enumColors": { "public-cloud": "blue", "on-premise": "bronze" }
-      },
-      "external": {
-        "type": "boolean",
-        "title": "External",
-        "description": "A third party's system we depend on but do not run (Backstage namespace external).",
-        "default": false
       },
       "docs": {
         "type": "string",
@@ -113,22 +112,6 @@
           { "property": "cash_flow_impact", "operator": "=", "value": true }
         ]
       }
-    },
-    "workload_replicas": {
-      "title": "Workload replicas",
-      "target": "workload",
-      "calculationSpec": { "calculationBy": "property", "func": "sum", "property": "replicas" },
-      "pathFilter": [
-        { "fromBlueprint": "workload", "path": ["service", "system"] }
-      ]
-    },
-    "deploys_per_week": {
-      "title": "Deploys per week",
-      "target": "workload",
-      "calculationSpec": { "calculationBy": "entities", "func": "average", "averageOf": "week", "measureTimeBy": "last_deployed" },
-      "pathFilter": [
-        { "fromBlueprint": "workload", "path": ["service", "system"] }
-      ]
     }
   },
   "ownership": {

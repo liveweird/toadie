@@ -125,13 +125,15 @@ export async function assertSeedParity(baseUrls, jwt, apiKey, schemaPath) {
     assert.ok(shop, 'shop sample entity is missing')
     assert.equal(shop.properties.service_count, 8)
 
-    // 2.13.0: the `dataset`/`api_adoption`/`dataset_adoption` blueprints. `orders` is consumed
-    // by both `storefront-web` and `legacy-invoicing` (their `consumes_datasets` relations) ->
-    // consumer_count 2. `catalog-graphql` has one declared adoption (`storefront-web-catalog-
-    // graphql`) -> adoption_count 1.
+    // 2.13.0: the `dataset`/`api_adoption`/`dataset_adoption` blueprints. `orders` is produced
+    // by one service (its `produces_datasets` relation) -> producer_count 1, and has one declared
+    // adoption -> adoption_count 1 (`consumer_count` was dropped in 2.35.0: the adoption is the
+    // single place that records consumption). `catalog-graphql` has one declared adoption
+    // (`storefront-web-catalog-graphql`) -> adoption_count 1.
     const orders = gqlEntities.find((row) => row.blueprint === 'dataset' && row.identifier === 'orders')
     assert.ok(orders, 'orders sample entity is missing')
-    assert.equal(orders.properties.consumer_count, 2)
+    assert.equal(orders.properties.producer_count, 1)
+    assert.equal(orders.properties.adoption_count, 1)
     const catalogGraphql = gqlEntities.find((row) => row.blueprint === 'api' && row.identifier === 'catalog-graphql')
     assert.ok(catalogGraphql, 'catalog-graphql sample entity is missing')
     assert.equal(catalogGraphql.properties.adoption_count, 1)

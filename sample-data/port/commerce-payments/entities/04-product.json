@@ -6,13 +6,10 @@
     "icon": "Package",
     "team": "retail-tribe",
     "properties": {
-      "type": "platform",
+      "type": "payment-product",
       "stage": "general-availability",
       "segment": ["mid-market", "enterprise"],
-      "delivery_model": "saas",
-      "pricing_model": "enterprise-contract",
       "sla": 99.95,
-      "regions": ["eu", "us"],
       "launched_on": "2022-01-10T00:00:00Z",
       "product_manager": "anna.kowalska",
       "roadmap": "https://roadmap.example.com/commerce-suite",
@@ -29,13 +26,10 @@
     "icon": "Package",
     "team": "payments-squad",
     "properties": {
-      "type": "api-product",
+      "type": "payment-product",
       "stage": "general-availability",
       "segment": ["developer", "enterprise"],
-      "delivery_model": "saas",
-      "pricing_model": "usage-based",
       "sla": 99.99,
-      "regions": ["eu", "us", "apac"],
       "launched_on": "2023-06-15T00:00:00Z",
       "product_manager": "marek.nowak",
       "docs": "https://docs.example.com/products/pay"
@@ -49,13 +43,10 @@
     "icon": "Package",
     "team": "storefront-squad",
     "properties": {
-      "type": "application",
+      "type": "non-payment-product",
       "stage": "general-availability",
       "segment": ["smb", "mid-market"],
-      "delivery_model": "saas",
-      "pricing_model": "subscription",
       "sla": 99.9,
-      "regions": ["eu", "us"],
       "launched_on": "2024-03-01T00:00:00Z",
       "product_manager": "anna.kowalska",
       "status_page": "https://status.example.com/shop",
@@ -70,13 +61,10 @@
     "icon": "Package",
     "team": "payments-squad",
     "properties": {
-      "type": "add-on",
+      "type": "payment-product",
       "stage": "beta",
       "segment": ["smb"],
-      "delivery_model": "saas",
-      "pricing_model": "freemium",
       "sla": 99.9,
-      "regions": ["eu"],
       "product_manager": "marek.nowak"
     },
     "relations": { "parent_product": "commerce-suite", "depends_on": ["pay"] }
@@ -88,11 +76,9 @@
     "icon": "Package",
     "team": "platform-tribe",
     "properties": {
-      "type": "internal-tool",
+      "type": "non-payment-product",
       "stage": "general-availability",
       "segment": ["internal"],
-      "delivery_model": "self-hosted",
-      "pricing_model": "free",
       "product_manager": "anna.kowalska"
     },
     "relations": {}

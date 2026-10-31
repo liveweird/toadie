@@ -11,7 +11,7 @@ the Backstage round trip below is about. `sample-data/port/commerce-payments/que
 The design decisions, taken 2026-09-10: `service` + `library` rather than one `component` or a
 five-way split (a Port relation targets ONE blueprint, so every extra blueprint multiplies the
 dependency relations); the full runtime layer `environment` + `cluster` + `workload`; Kafka topics
-are `api` of type `asyncapi`; a minimal `user`; `product` (2.11.0, 2026-09-20): the commercial offering as its own blueprint rather than a `system.type` value — linked from the system side (`system.products`, many) so a shared platform lists every product it serves, suites via `parent_product`, add-ons via `depends_on`, Port-only since Backstage has no Product kind, `system.type` kept as `product|capability` with reworded descriptions; `dataset`, `api_adoption`,
+are `api` of type `asyncapi`; a minimal `user`; `product` (2.11.0, 2026-09-20): the commercial offering as its own blueprint rather than a `system.type` value — linked from the system side (`system.products`, many) so a shared platform lists every product it serves, suites via `parent_product`, add-ons via `depends_on`, Port-only since Backstage has no Product kind (its `type` is `payment-product|non-payment-product` since 2.35.0); `system.type` was `product|capability` and is a six-value taxonomy since 2.35.0 (below); `dataset`, `api_adoption`,
 `dataset_adoption` (2.13.0, 2026-09-20): the data-side contract surface and declared usage join
 the model — `dataset` is the data-side interface surface the way `api` is the request-side one
 (`resource` says a store exists, not WHICH datasets it holds or who produces/consumes them), so
@@ -22,11 +22,12 @@ service's interfaces, and the same mapping shape downstream consumers already un
 relations carry none — the `workload` precedent, service × environment × cluster), each
 Inherited ownership via `consumer` and composition under `consumer` (the `workload` posture);
 both are declared, never observed — `declared_by` (format `user`) + `verified_at` only, no
-runtime-evidence fields, since Toadie observes nothing, so an absent `major_line`/
-`contract_version` is a valid "undeclared" adoption; `dataset.contract_url` points at the
+runtime-evidence fields, since Toadie observes nothing, so an absent
+`contract_version` (both adoptions carry it since 2.35.0; `api_adoption` called it `major_line` before) is a valid "undeclared" adoption; `dataset.contract_url` points at the
 published contract rather than a `data_contract` blueprint, since contract documents live in
 contract-management tools and Toadie only records that one exists (the calculated `covenant_contract` on `api`/`dataset`, 2.30.0, is the separate Covenant PAGE for that entity, not the ODCS document `contract_url` points at); an adoption coexisting with
 the consumer's own `consumes_apis`/`consumes_datasets` is a convention, never validated.
+**Double bookkeeping (2.35.0) is deliberate**: the relation says THAT a service consumes an API/dataset, the adoption says WHICH contract version and with what status; the blueprint descriptions say so and nothing cross-checks the two (`dataset.consumer_count`, which counted the relation, was dropped — `adoption_count` counts the declarations). A generic adoption/relation consistency check is parked in `BACKLOG.md` ("Ontology").
 `SampleBlueprintsTest` pins everything below that is
 mechanical, and `SampleEntitiesTest` proves the entity sample saves with zero findings (`.claude/docs/testing.md`).
 
@@ -79,6 +80,15 @@ demonstrates what parallel hierarchies are for; `load.sh` appends `deployment` t
 before loading. Ownership is deliberately NOT a hierarchy here: Port models it as the entity's
 `$team` field, not a relation, and a hierarchy link is always a relation key.
 
+**The deployment hierarchy's limit (2.35.0).** A hierarchy link is a SINGLE-valued relation, and
+`cluster.environment` serves both hierarchies, so a cluster names exactly ONE environment: a shared
+non-production cluster (`staging-k8s`, which also hosts `live-cart-gateway`'s test workload) sits
+under `staging`, and a workload of another environment running on it is not visible as a
+deployment-tree anomaly. The public saved query "Workloads outside their cluster's environment"
+(`queries/09-workloads-outside-cluster-environment.json`) finds them. `workload.cluster` is optional,
+so a workload without a cluster floats as a ROOT of the deployment tree — the intended nudge, as for
+an orphan service in the architecture tree.
+
 **Conventions.** Property names `snake_case`. Ownership is Port's `$team` (arrived with Phase 4,
 v1.26.0, V31): each blueprint declares `ownership: {type: Direct}` (domain, product, system, service,
 library, api, resource, dataset, cluster) or `ownership: {type: Inherited, path: service}`
@@ -91,14 +101,14 @@ the `ownership.path`. `_user.team` (many, optional) is membership, a relation to
 Required relations are always single (Port forbids `required` + `many`). Every blueprint except the
 two adoption relation entities (`api_adoption`/`dataset_adoption`, 2.13.0 — a declaration, not a
 thing with pages of its own) carries `links` (`array` of `object`, ↔ `metadata.links`) plus named
-link properties where the link has one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`). `external:
-boolean` on `system`/`api` preserves the `external` namespace (third parties). `product_manager` (format: `user`) is the first `format: user` property — validated against `_user` entities on write, `USER_TARGET_MISSING` finding on read, renaming a `_user` cascades. `declared_by`
+link properties where the link has one meaning (`repository`, `docs`, `ci_pipeline`, `dashboard`, `logs`, `runbook`, `oncall_schedule`, `teams_channel`). Third parties are the `system.type` value `external` (2.35.0); there is no `external` boolean on `system`/`api` and no namespace rule — an export lands every document in the default namespace. `product_manager` (format: `user`) is the first `format: user` property — validated against `_user` entities on write, `USER_TARGET_MISSING` finding on read, renaming a `_user` cascades. `declared_by`
 (`api_adoption`/`dataset_adoption`, 2.13.0) is the second `format: user` property, validated the
 same way; `notes` (the same two blueprints) is the first `format: markdown` property — free
-text, no further validation. **Regulatory flags (2.17.0)** are plain `boolean` properties, never yes/no enums: `gdpr`/`pci_dss`/`banking_outsourcing` on `service`, `api`, `resource` and `dataset` (on the first three ↔ the `yes`/`no` labels `gdpr`/`pci-dss`/`banking-outsourcing` on Component/API/Resource — widened from Resource-only by V43; `dataset` is Port-only, no label) and `cash_flow_impact`/`dora_cif` on `service` (↔ `cash-flow-impact`/`dora-cif` on Component). `_user.employment_type` (`employee`/`contractor`) is a Port-only enum — Backstage User has no twin. No secrets,
+text, no further validation. **Regulatory flags (2.17.0)** are plain `boolean` properties, never yes/no enums: `gdpr`/`pci_dss`/`banking_outsourcing` on `service`, `api`, `resource` and `dataset` (on the first three ↔ the `yes`/`no` labels `gdpr`/`pci-dss`/`banking-outsourcing` on Component/API/Resource — widened from Resource-only by V43; `dataset` is Port-only, no label) and `cash_flow_impact`/`dora_cif` on `service` (↔ `cash-flow-impact`/`dora-cif` on Component). **Types (2.35.0).** `system.type` is a six-value taxonomy — `value-creation` (realises a customer-facing offering on its own), `shared-service` (a building block several products share), `integration` (communication and real-time information exchange), `data-and-reporting`, `infrastructure-and-platform` and `external` (provided by a third party) — matching the V50 re-curation of the Backstage System type dictionary (the conversion mapping copies `system.type` onto `spec.type` verbatim, so the two lists must agree or the mapping reports drift); the five sample systems use three of the six (`SampleEntitiesTest` exempts this one dictionary from the exercised-in-full rule). `product.type` is `payment-product|non-payment-product`. **Fill-in tiers (2.18.0, shipped in the sample since 2.35.0).** Every sample blueprint carries `tiers`, aligned by one rule: the same property has the SAME tier on every blueprint that declares it (`description`/`repository` 1, `lifecycle` 2, `exposure`/`hosting_model`/the regulatory flags 3, and so on), and every required property or relation is tiered. `BlueprintSync` carries `tiers` when the synced document has them.
+`_user.employment_type` (`employee`/`contractor`) is a Port-only enum — Backstage User has no twin. No secrets,
 connection strings or hostnames as properties, ever.
 
-**Computed properties (phase 5, v1.27.0).** Twenty-four mirror/calculation/aggregation properties
+**Computed properties (phase 5, v1.27.0).** Twenty-one mirror/calculation/aggregation properties
 across ten blueprints, evaluated at entity read time (`.claude/docs/port-data-model.md`
 "Computed properties"); `SampleEntitiesTest` derives every expected value from the sample
 entity files rather than hardcoding them.
@@ -106,17 +116,14 @@ entity files rather than hardcoding them.
 | Blueprint | id | kind | definition |
 |---|---|---|---|
 | `_team` | `member_count` | aggregation | target `_user`, `entities/count` — direct, via `_user`'s own `team` relation |
-| `domain` | `critical_systems` | aggregation | target `system`, `entities/count`, query `criticality = critical` — direct, via `system.domain` |
+| `domain` | `critical_systems` | aggregation | target `system`, `entities/count`, query `criticality = critical`, `pathFilter` with two entries (a UNION, 2.35.0): `[{fromBlueprint: system, path: [domain]}, {fromBlueprint: system, path: [domain, parent_domain]}]` — the domain's own critical systems plus those of its direct sub-domains |
 | `product` | `system_count` | aggregation | target `system`, `entities/count` — direct, inbound via `system.products` |
 | `product` | `critical_systems` | aggregation | target `system`, `entities/count`, query `criticality = critical` — direct, inbound via `system.products` |
-| `product` | `service_count` | aggregation | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [system, products]}]` (reverse: service → system → product — `fromBlueprint` is the target, the `workload_replicas` shape) |
+| `product` | `service_count` | aggregation | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [system, products]}]` (reverse: service → system → product — `fromBlueprint` is the target). It over-counts on purpose: a system shared by several products counts its services for each of them, so the sum over products exceeds the number of services |
 | `system` | `service_count` | aggregation | target `service`, `entities/count` — direct, via `service.system` |
 | `system` | `cif_services` | aggregation (2.17.0) | target `service`, `entities/count`, query `dora_cif = true` — direct, via `service.system` |
 | `system` | `cash_flow_services` | aggregation (2.17.0) | target `service`, `entities/count`, query `cash_flow_impact = true` — direct, via `service.system` |
-| `system` | `workload_replicas` | aggregation | target `workload`, `property/sum` of `replicas`, `pathFilter [{fromBlueprint: workload, path: [service, system]}]` (reverse: workload → service → system) |
-| `system` | `deploys_per_week` | aggregation | target `workload`, `entities/average` per `week`, `measureTimeBy: last_deployed`, the same reverse `pathFilter` — time-dependent (**assumption**, see `port-data-model.md`) |
-| `dataset` | `producer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [produces_datasets]}]` — reverse, one hop, distinguished from `consumer_count` by relation key |
-| `dataset` | `consumer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [consumes_datasets]}]` — reverse, one hop, distinguished from `producer_count` by relation key |
+| `dataset` | `producer_count` | aggregation (2.13.0) | target `service`, `entities/count`, `pathFilter [{fromBlueprint: service, path: [produces_datasets]}]` — reverse, one hop |
 | `dataset` | `adoption_count` | aggregation (2.13.0) | target `dataset_adoption`, `entities/count` — direct, inbound via `dataset_adoption.dataset` |
 | `api` | `adoption_count` | aggregation (2.13.0) | target `api_adoption`, `entities/count` — direct, inbound via `api_adoption.api` |
 | `dataset` | `covenant_contract` | calculation (2.30.0), `format: url` | `"http://localhost:8082/toadie/dataset/" + (.identifier \| @uri)` — the Covenant resolver page for the dataset's contract(s); the base URL is edited per deployment in the blueprint's calculation; `contract_url` stays the stored link to the ODCS document itself |
@@ -132,9 +139,9 @@ An unresolvable value (a dangling relation, a jq failure, a type mismatch) is si
 never a finding, never a save blocker; `01-team.json`'s `member_count` is the one SYSTEM
 blueprint extension (`_team` may add aggregation properties like any other field). Because an
 aggregation's `target` must already be an ACTIVE blueprint, `domain.critical_systems`, `product`'s three aggregations,
-`dataset`'s three aggregations (`producer_count`/`consumer_count` target `service`,
-`adoption_count` target `dataset_adoption`), `api.adoption_count` (target `api_adoption`), and
-`system`'s five aggregations name a blueprint that loads LATER in the numbered set — the
+`dataset`'s two aggregations (`producer_count` targets `service`,
+`adoption_count` targets `dataset_adoption`), `api.adoption_count` (target `api_adoption`), and
+`system`'s three aggregations name a blueprint that loads LATER in the numbered set — the
 loader (`sample-data/port/commerce-payments/blueprints/load.sh`, `SampleData.loadBlueprints`) applies these in TWO
 passes: every file first, with `aggregationProperties` stripped, then a second pass PUTs the
 full file back onto every blueprint that declares one, once every target exists.
@@ -143,11 +150,11 @@ full file back onto every blueprint that declares one, once every target exists.
 test-side tables here is now DATA with one canonical home:
 [`sample-data/port/commerce-payments/mapping/backstage.json`](../../sample-data/port/commerce-payments/mapping/backstage.json),
 a conversion mapping document (`.claude/docs/conversion-mapping.md` has the format) — eight pairs
-and 120 rules saying which property is which label, tag category, annotation, link or spec field,
+and 119 rules saying which property is which label, tag category, annotation, link or spec field,
 which blueprint is which kind (`library` is Component selected by `spec.type: library`), how
-`external: true` becomes the `external` namespace, how ownership (`$team` -> `spec.owner`) and the
+ownership (`$team` -> `spec.owner`) and the
 relations map, and which Group fields (`children`/`members`) are derived from the reverse side. It is
-validated against the sample blueprints and the seeded registries (V22, V43, V47) by `SampleBlueprintsTest`
+validated against the sample blueprints and the seeded registries (V22, V43, V47, V50) by `SampleBlueprintsTest`
 (zero blocking findings, zero drift); do not restate its contents here. What stays prose:
 
 - **Port-only (no pair, dropped on export)**: `product`, `dataset`, `api_adoption`,
@@ -164,14 +171,15 @@ validated against the sample blueprints and the seeded registries (V22, V43, V47
   `library` has `subcomponent_of`, a `many: false` relation to ANOTHER LIBRARY: it cannot target
   `service`, which already references `library` through `uses_libraries`, and a relation target must
   exist when the blueprint is created, so the two cannot point at each other.)
-- **`api` definitions**: the inline `definition` is written as `spec.definition`; an API without
-  one gets a placeholder (`exportDefault`, also the rule's `importIgnore`, so it is never imported
-  back as a definition) because Backstage requires the field — the sample gives every API its
-  definition, so the placeholder never appears in it. `definition_url` is an independent leaf
+- **`api` definitions** (2.35.0): the Port `api` stores NO inline definition document — the blueprint
+  has no `definition` property. The mapping writes `spec.definition` with a `constant` rule
+  (`# no definition recorded`; Backstage requires the field), which is export-only: an import
+  discards `spec.definition` whatever it holds, and the placeholder appears on every exported API.
+  The document itself lives where the `definition_url` points; that property is an independent leaf
   (since 2.31.0): a `copy` rule with the `url:` prefix writes it as the
   `backstage.io/definition-at-location` annotation (registered for API by V47), so an API with
-  both gets both, one with only a URL gets the placeholder `spec.definition` plus the annotation,
-  and one with neither just the placeholder. On import the `url:` prefix is stripped; a value
+  a URL gets the annotation next to the placeholder `spec.definition`, and one without a URL just
+  the placeholder. On import the `url:` prefix is stripped; a value
   without it is `VALUE_UNMAPPED` and kept. A Backstage `$text` substitution is an OBJECT
   (`{$text: <url>}`), not a string, and resolving it would change the catalog's document model,
   so the mapping deliberately does not emit it. Upstream lists the annotation as deprecated in
@@ -185,7 +193,7 @@ validated against the sample blueprints and the seeded registries (V22, V43, V47
   is replaced (`mapping/load.sh --delete && mapping/load.sh`, or a PUT), so these rules apply only
   after that.
 - **Links**: `links` (array of `{title, url}`) <-> `metadata.links`; the named link properties
-  (`ci_pipeline`, `dashboard`, `logs`, `runbook`, `slack_channel`) are `link` rules with a fixed title.
+  (`ci_pipeline`, `dashboard`, `logs`, `runbook`, `oncall_schedule` with the title "On-call", `teams_channel`) are `link` rules with a fixed title.
 - Ownership: the entity `team` field (string for single, array for multiple) is `spec.owner`; it is
   read-only on Inherited blueprints, computed from the ownership path.
 

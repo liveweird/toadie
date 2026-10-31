@@ -62,7 +62,9 @@ class EntityTypesTest {
         assertTrue("openapi" in byKind.getValue("API").types)
         assertTrue("team" in byKind.getValue("Group").types)
         assertTrue("database" in byKind.getValue("Resource").types)
-        assertTrue("product" in byKind.getValue("System").types)
+        // V50 (2.35.0) re-curated the System list from product/capability to the six-value taxonomy.
+        assertTrue("value-creation" in byKind.getValue("System").types)
+        assertTrue("product" !in byKind.getValue("System").types)
         // V22 replaced V15's well-known Domain values with the curated ones.
         assertTrue("core-value" in byKind.getValue("Domain").types)
         assertTrue("User" !in byKind, "User has no spec.type — it must never hold a dictionary")

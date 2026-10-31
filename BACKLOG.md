@@ -50,6 +50,13 @@ promotes it. A finished item is removed, not ticked.
   test cross-replica behavior, and only then change `k8s/app-deployment.yaml`
   from one replica and `Recreate`. Until then, one replica is an intentional deployment rule, not a broken rollout.
 
+## Ontology
+
+- [new] **Generic adoption/relation consistency check.** Report (Port Errors, report-only) an
+  api_adoption/dataset_adoption whose consumer's consumes_apis/consumes_datasets does not list the
+  adopted api/dataset, and the reverse; data-driven over the blueprint pair, never ontology names
+  (the 2.35.0 double-bookkeeping convention in .claude/docs/ontology.md).
+
 ## Housekeeping
 
 - [new] **Re-check the MCP transport facts on the first MCP Kotlin SDK bump.** The SDK is pinned

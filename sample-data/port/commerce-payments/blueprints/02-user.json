@@ -3,6 +3,11 @@
   "title": "User",
   "description": "A person. Kept minimal on purpose: teams own things, people belong to teams. Backstage kind: User (team → spec.memberOf, email → spec.profile.email; employment_type is Port-only, dropped on export).",
   "icon": "User",
+  "tiers": {
+    "blueprint": 4,
+    "properties": { "description": 1, "email": 1, "employment_type": 2 },
+    "relations": { "team": 1 }
+  },
   "schema": {
     "properties": {
       "description": {

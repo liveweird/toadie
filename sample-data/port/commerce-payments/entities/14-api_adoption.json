@@ -5,7 +5,7 @@
     "title": "storefront-web → catalog-graphql v2",
     "icon": "Link",
     "properties": {
-      "major_line": "v2",
+      "contract_version": "v2",
       "status": "current",
       "declared_by": "anna.kowalska",
       "verified_at": "2026-08-01T09:00:00Z"
@@ -17,7 +17,7 @@
     "identifier": "storefront-web-checkout-rest",
     "title": "storefront-web → checkout-rest v1",
     "properties": {
-      "major_line": "v1",
+      "contract_version": "v1",
       "status": "migrating",
       "declared_by": "marek.nowak",
       "verified_at": "2026-07-15T14:30:00Z",
@@ -41,7 +41,7 @@
     "identifier": "checkout-service-payments-grpc",
     "title": "checkout-service → payments-grpc v1",
     "properties": {
-      "major_line": "v1",
+      "contract_version": "v1",
       "status": "retiring",
       "declared_by": "marek.nowak",
       "verified_at": "2026-05-10T08:00:00Z"

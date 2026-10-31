@@ -370,8 +370,8 @@ each `pathFilter` entry `{fromBlueprint, path}` narrows to ONE direction instead
 target` statically resolves `target --r1--> … --rn--> <subject's blueprint>` and then walks
 BACKWARDS from the subject through `EntityIndex.inbound`, one hop at a time, matching each
 step's expected source blueprint and relation id — the REVERSE direction, needed when the
-relation is declared on `target` rather than the subject (e.g. a `system`'s `workload_replicas`
-reading `workload → service → system`); any other `fromBlueprint`, or a malformed entry,
+relation is declared on `target` rather than the subject (e.g. a `product`'s `service_count`
+reading `service → system → products`); any other `fromBlueprint`, or a malformed entry,
 contributes nothing (**assumption**). Direct-relation aggregation candidates (no `pathFilter`)
 are capped at `MAX_MIRROR_FANOUT`, the same bound the `pathFilter` walks already apply.
 Candidates are deduped by identifier, then filtered by

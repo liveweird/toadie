@@ -188,5 +188,6 @@ object SampleData {
         aggregationProperties = aggregationProperties,
         ownership = ownership,
         hierarchyRelations = hierarchyRelations,
+        tiers = tiers,
     )
 }

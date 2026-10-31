@@ -74,13 +74,7 @@ class SampleImportConversionTest {
     private fun str(value: String) = JsonPrimitive(value)
     private fun strings(vararg values: String) = JsonArray(values.map { JsonPrimitive(it) })
 
-    private val externalFalse = "an `external` boolean is materialised: the Backstage document sits in the default namespace, " +
-        "which the namespace rule maps to false, while the Port sample leaves the property unset"
-
     private val deviations = listOf(
-        "system/payments", "system/invoicing", "system/developer-portal",
-        "api/catalog-graphql", "api/live-cart", "api/order-events", "api/payments-grpc",
-    ).map { Deviation(it, "properties.external", JsonPrimitive(false), null, externalFalse) } + listOf(
         Deviation(
             "domain/payments", "team", str("payments-squad"), strings("payments-squad", "platform-tribe"),
             "two teams, one owner: spec.owner keeps the first (the export's OWNER_TRUNCATED, in reverse)",
@@ -98,11 +92,6 @@ class SampleImportConversionTest {
             "the Backstage sample deliberately depends on resource:default/invoice-archive (missing) and a bare 'orders-db' " +
                 "(no kind): both REFERENCE_DROPPED, so nothing is left to become the relation",
         ),
-    )
-
-    /** `definition` is trimmed by the catalog's own sanitizer (the Port sample's values end in a newline). */
-    private val trimmedByCatalog = setOf(
-        "api/catalog-graphql", "api/checkout-rest", "api/live-cart", "api/order-events", "api/payments-grpc", "api/acquirer-rest",
     )
 
     private fun JsonObject.identity() = getValue("blueprint").jsonPrimitive.content + "/" + getValue("identifier").jsonPrimitive.content
@@ -182,9 +171,6 @@ class SampleImportConversionTest {
             val portByIdentity = portDocs.associateBy { it.identity() }
             val convertedByIdentity = first.documents.associateBy { it.identity() }
             val residual = first.documents.flatMap { diffs(it, normalized(portByIdentity.getValue(it.identity()), mapping)) }
-            val trimmed = residual.filter { it.identity in trimmedByCatalog && it.path == "properties.definition" }
-            trimmed.forEach { assertEquals(it.port?.jsonPrimitive?.content?.trim(), it.converted?.jsonPrimitive?.content, it.identity) }
-            assertEquals(trimmedByCatalog, trimmed.map { it.identity }.toSet(), "the sanitizer trims exactly the API definitions")
             deviations.forEach { deviation ->
                 val converted = convertedByIdentity.getValue(deviation.identity)
                 val section = deviation.path.substringBefore('.', "")
@@ -197,7 +183,7 @@ class SampleImportConversionTest {
             }
             assertEquals(
                 deviations.map { it.key() }.sortedBy { it.toString() },
-                (residual - trimmed.toSet()).map { it.key() }.sortedBy { it.toString() },
+                residual.map { it.key() }.sortedBy { it.toString() },
                 "the differing fields are exactly the listed deviations",
             )
 
@@ -339,15 +325,13 @@ class SampleImportConversionTest {
             assertTrue(merged.rows.all { it.existingId != null }, "every document merges over its Port entity")
 
             // The merged documents ARE the Port sample's entities (nothing is normalised away - no lossy list, no icon rule,
-            // no team flattening): the only differences are the two classes the merge cannot avoid, each asserted by value.
+            // no team flattening): nothing differs since 2.35.0 (the catalog-trimmed definitions and the
+            // materialised `external` booleans are gone).
             val portByIdentity = portDocs.associateBy { it.identity() }
             val residual = merged.documents.flatMap { diffs(it, portByIdentity.getValue(it.identity()).let { port -> dropNulls(port) }) }
-            val trimmed = residual.filter { it.identity in trimmedByCatalog && it.path == "properties.definition" }
-            trimmed.forEach { assertEquals(it.port?.jsonPrimitive?.content?.trim(), it.converted?.jsonPrimitive?.content, it.identity) }
-            assertEquals(trimmedByCatalog, trimmed.map { it.identity }.toSet())
             assertEquals(
-                deviations.filter { it.path == "properties.external" }.map { it.key() }.sortedBy { it.toString() },
-                (residual - trimmed.toSet()).map { it.key() }.sortedBy { it.toString() },
+                emptyList(),
+                residual.map { it.key() }.sortedBy { it.toString() },
                 "nothing else differs: team arrays, lossy relations, icons, schedules and legacy-invoicing's uses all survive",
             )
 

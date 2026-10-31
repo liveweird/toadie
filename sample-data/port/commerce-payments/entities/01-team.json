@@ -8,7 +8,7 @@
       "description": "Owns the shared platform; the payments squad reports into it.",
       "type": "org-division",
       "email": "platform-tribe@toadie.local",
-      "slack_channel": "https://acme.slack.com/archives/platform-tribe",
+      "teams_channel": "https://teams.acme.example.com/channels/platform-tribe",
       "links": [
         { "title": "Tribe wiki", "url": "https://wiki.example.com/platform-tribe" }
       ]
@@ -24,7 +24,7 @@
       "description": "Owns the storefront system end to end.",
       "type": "org-unit",
       "email": "retail-tribe@toadie.local",
-      "slack_channel": "https://acme.slack.com/archives/retail-tribe"
+      "teams_channel": "https://teams.acme.example.com/channels/retail-tribe"
     },
     "relations": {}
   },
@@ -37,7 +37,7 @@
       "description": "Owns the payments capability. Part of the Platform Tribe.",
       "type": "team",
       "email": "payments-squad@toadie.local",
-      "slack_channel": "https://acme.slack.com/archives/payments-squad"
+      "teams_channel": "https://teams.acme.example.com/channels/payments-squad"
     },
     "relations": { "parent": "platform-tribe" }
   },

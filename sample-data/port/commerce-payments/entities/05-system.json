@@ -7,12 +7,11 @@
     "team": "retail-tribe",
     "properties": {
       "description": "The public shop — browsing, cart and checkout.",
-      "type": "product",
+      "type": "value-creation",
       "criticality": "critical",
       "support_mode": "24-7",
       "exposure": "public",
       "hosting_model": "public-cloud",
-      "external": false,
       "docs": "https://docs.example.com/systems/storefront",
       "kubernetes_id": "storefront",
       "links": [
@@ -29,7 +28,7 @@
     "team": "payments-squad",
     "properties": {
       "description": "Card authorisation, the ledger and settlement reporting.",
-      "type": "capability",
+      "type": "value-creation",
       "criticality": "critical",
       "support_mode": "24-7",
       "exposure": "partner",
@@ -44,12 +43,11 @@
     "title": "Acquirer (third party)",
     "team": "payments-squad",
     "properties": {
-      "description": "The card acquirer we authorise against. Lives in the `external` namespace — we model it because we depend on it, but we do not own or run it.",
-      "type": "capability",
+      "description": "The card acquirer we authorise against. A third-party system, typed `external` — we model it because we depend on it, but we do not own or run it.",
+      "type": "external",
       "criticality": "critical",
       "support_mode": "business-hours",
       "exposure": "partner",
-      "external": true,
       "links": [
         { "title": "Acquirer status page", "url": "https://status.acquirer.example.com" }
       ]
@@ -63,7 +61,7 @@
     "team": "payments-squad",
     "properties": {
       "description": "Customer invoicing and the legacy batch tooling around it.",
-      "type": "capability",
+      "type": "value-creation",
       "criticality": "non-critical",
       "support_mode": "business-days",
       "exposure": "internal",
@@ -78,7 +76,7 @@
     "team": "platform-tribe",
     "properties": {
       "description": "The internal developer portal and its supporting database.",
-      "type": "product",
+      "type": "infrastructure-and-platform",
       "criticality": "non-critical",
       "support_mode": "best-effort",
       "exposure": "internal",

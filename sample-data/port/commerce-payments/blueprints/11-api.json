@@ -1,9 +1,14 @@
 {
   "identifier": "api",
   "title": "API",
-  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → backstage.io/definition-at-location (url: location), system → spec.system, the team field → spec.owner; exposure/hosting_model/gdpr/pci_dss/banking_outsourcing → labels).",
+  "description": "A contract other software calls or subscribes to: a REST/GraphQL/gRPC/WebSocket interface, or a Kafka topic described by an AsyncAPI document. The service that implements it lists it under provides_apis; callers under consumes_apis. Backstage kind: API (type → spec.type, definition_url → backstage.io/definition-at-location (url: location), system → spec.system, the team field → spec.owner; exposure/hosting_model/gdpr/pci_dss/banking_outsourcing → labels). An API's definition document is not stored here (definition_url points at it); the Backstage export writes a placeholder spec.definition.",
   "icon": "Link",
   "hierarchyRelations": {"composition": "system"},
+  "tiers": {
+    "blueprint": 3,
+    "properties": { "description": 1, "type": 1, "lifecycle": 2, "exposure": 3, "hosting_model": 3, "gdpr": 3, "pci_dss": 3, "banking_outsourcing": 3 },
+    "relations": { "system": 1 }
+  },
   "schema": {
     "properties": {
       "description": {
@@ -30,12 +35,6 @@
         "title": "Definition",
         "description": "Where the OpenAPI/AsyncAPI/GraphQL/proto document lives (Backstage backstage.io/definition-at-location, url: location).",
         "format": "url"
-      },
-      "definition": {
-        "type": "string",
-        "title": "Inline definition",
-        "description": "The document itself, when it has no home of its own.",
-        "format": "yaml"
       },
       "exposure": {
         "type": "string",
@@ -65,12 +64,6 @@
         "type": "boolean",
         "title": "Banking outsourcing",
         "description": "Processes data covered by the outsourcing of banking activities (KNF; Polish Banking Law art. 6a-6d). Label banking-outsourcing (yes/no)."
-      },
-      "external": {
-        "type": "boolean",
-        "title": "External",
-        "description": "A third party's API we call but do not own (Backstage namespace external).",
-        "default": false
       },
       "docs": {
         "type": "string",

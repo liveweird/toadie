@@ -1,9 +1,14 @@
 {
   "identifier": "domain",
   "title": "Domain",
-  "description": "A business area that groups systems — Payments, Storefront, Platform. The top of the architecture tree. Backstage kind: Domain (parent_domain → spec.subdomainOf, the team field → spec.owner).",
+  "description": "A business area that groups systems — Payments, Storefront, Platform. The top of the architecture tree. Backstage kind: Domain (parent_domain → spec.subdomainOf, the team field → spec.owner). critical_systems counts the domain's own critical systems plus those of its direct sub-domains.",
   "icon": "Folder",
   "hierarchyRelations": {"composition": "parent_domain"},
+  "tiers": {
+    "blueprint": 1,
+    "properties": { "description": 1, "type": 1 },
+    "relations": { "parent_domain": 1 }
+  },
   "schema": {
     "properties": {
       "description": {
@@ -46,6 +51,10 @@
       "title": "Critical systems",
       "target": "system",
       "calculationSpec": { "calculationBy": "entities", "func": "count" },
+      "pathFilter": [
+        { "fromBlueprint": "system", "path": ["domain"] },
+        { "fromBlueprint": "system", "path": ["domain", "parent_domain"] }
+      ],
       "query": {
         "combinator": "and",
         "rules": [

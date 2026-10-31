@@ -8,11 +8,10 @@
     "properties": {
       "type": "table",
       "lifecycle": "production",
-      "classification": "internal",
+      "data_classification": "internal",
       "gdpr": false,
       "pci_dss": false,
       "banking_outsourcing": false,
-      "freshness": "hourly",
       "contract_url": "https://contracts.example.com/contracts/product-catalog",
       "docs": "https://docs.example.com/datasets/product-catalog"
     },
@@ -26,12 +25,10 @@
     "properties": {
       "type": "table",
       "lifecycle": "production",
-      "classification": "confidential",
+      "data_classification": "confidential",
       "gdpr": true,
       "pci_dss": false,
-      "banking_outsourcing": false,
-      "freshness": "real-time",
-      "retention_days": 3650
+      "banking_outsourcing": false
     },
     "relations": { "system": "storefront", "stored_in": "orders-db" }
   },
@@ -43,11 +40,10 @@
     "properties": {
       "type": "event-stream",
       "lifecycle": "production",
-      "classification": "restricted",
+      "data_classification": "restricted",
       "gdpr": true,
       "pci_dss": true,
       "banking_outsourcing": true,
-      "freshness": "real-time",
       "links": [
         { "title": "Ledger schema", "url": "https://wiki.example.com/payments-ledger/schema" }
       ]
@@ -62,12 +58,10 @@
     "properties": {
       "type": "file-export",
       "lifecycle": "sunsetting",
-      "classification": "confidential",
+      "data_classification": "confidential",
       "gdpr": false,
       "pci_dss": true,
-      "banking_outsourcing": true,
-      "freshness": "daily",
-      "retention_days": 2555
+      "banking_outsourcing": true
     },
     "relations": { "system": "payments" }
   },
@@ -79,11 +73,10 @@
     "properties": {
       "type": "view",
       "lifecycle": "experimental",
-      "classification": "public",
+      "data_classification": "public",
       "gdpr": false,
       "pci_dss": false,
-      "banking_outsourcing": false,
-      "freshness": "weekly"
+      "banking_outsourcing": false
     },
     "relations": { "system": "storefront", "stored_in": "catalog-db" }
   }
