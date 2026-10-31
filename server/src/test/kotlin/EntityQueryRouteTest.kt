@@ -386,6 +386,66 @@ class EntityQueryRouteTest {
     }
 
     @Test
+    fun `a NOT EXISTS block narrows the graph to the entities with no owner`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-eq-exists", UserRole.ADMIN)
+        val bp = unique("bp-eq-exists")
+        val teamA = unique("team-eq-exists")
+        val owned = unique("ent-eq-owned")
+        val orphan1 = unique("ent-eq-orphan1")
+        val orphan2 = unique("ent-eq-orphan2")
+        try {
+            client.createBlueprint(
+                BlueprintRequest(
+                    identifier = bp, title = "T", schema = BlueprintSchema(),
+                    ownership = OwnershipDefinition(type = "Direct"),
+                ),
+            )
+            client.postJson("/api/v1/entities", teamEntity(teamA))
+            client.postJson("/api/v1/entities", EntityRequest(blueprint = bp, identifier = owned, title = "T", team = JsonPrimitive(teamA)))
+            client.postJson("/api/v1/entities", entityRequest(bp, orphan1))
+            client.postJson("/api/v1/entities", entityRequest(bp, orphan2))
+
+            val orphans = "MATCH (e:`$bp`) WHERE NOT EXISTS { (e)-[:\$team]->(:`$SYSTEM_TEAM_BLUEPRINT`) } RETURN e"
+            val graph = client.get("/api/v1/entities/graph?query=${orphans.urlEncoded()}").body<EntityGraph>()
+            assertEquals(setOf("$bp|$orphan1", "$bp|$orphan2"), graph.nodes.map { it.id }.toSet())
+
+            val owners = "MATCH (e:`$bp`) WHERE EXISTS { (e)-[:\$team]->(:`$SYSTEM_TEAM_BLUEPRINT`) } RETURN e"
+            val ownedGraph = client.get("/api/v1/entities/graph?query=${owners.urlEncoded()}").body<EntityGraph>()
+            assertEquals(setOf("$bp|$owned"), ownedGraph.nodes.map { it.id }.toSet())
+        } finally {
+            TestEntities.remove(owned, orphan1, orphan2, teamA)
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
+    fun `query check answers an uncorrelated EXISTS block as DISCONNECTED_PATTERN at a 1-based position`() = testApplication {
+        usePostgresTestcontainer()
+        val client = seededClient("ent-eq-exists-check", UserRole.ADMIN)
+        val bp = unique("bp-eq-exists-check")
+        try {
+            client.createBlueprint(simpleBlueprint(bp))
+            val query = "MATCH (a:`$bp`) WHERE NOT EXISTS { (x:`$bp`) } RETURN a"
+
+            val check = client.postJson("/api/v1/entities/query/check", EntityQueryCheckRequest(query))
+            assertEquals(HttpStatusCode.OK, check.status)
+            val diagnostic = check.body<EntityQueryCheckResponse>().diagnostics.single()
+            assertEquals(QueryDiagnosticCodes.DISCONNECTED_PATTERN, diagnostic.code)
+            assertEquals(1, diagnostic.line)
+            assertEquals(query.indexOf("(x:") + 1, diagnostic.column)
+            assertTrue(diagnostic.message.startsWith("Pattern `x` inside EXISTS"), diagnostic.message)
+
+            // The graph read refuses the same query with the same diagnostic, before any evaluation.
+            val response = client.get("/api/v1/entities/graph?query=${query.urlEncoded()}")
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(QueryDiagnosticCodes.DISCONNECTED_PATTERN, response.body<EntityQueryProblem>().diagnostics.single().code)
+        } finally {
+            TestBlueprints.remove(bp)
+        }
+    }
+
+    @Test
     fun `evaluation exceeding the binding cap is BINDING_LIMIT`() = testApplication {
         usePostgresTestcontainer()
         val client = seededClient("ent-eq-bind", UserRole.ADMIN)

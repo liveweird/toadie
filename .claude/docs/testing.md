@@ -706,8 +706,17 @@ WHERE operator, multi-MATCH joins, OPTIONAL null-keeping incl. a chain through a
 dedupe, LIMIT after dedupe, the binding cap, the deadline via an injected clock, caller
 cancellation propagating unswallowed), `QueryEvaluatorScaleTest` (synthetic 10k rows / 10
 blueprints — correct counts under a GENEROUS `withTimeout`, never a tight timing) and
-`QueryTckCasesTest` (26 hand-transcribed openCypher TCK scenarios as a table over one fixture —
-no `.feature` reader, the TCK uses `CREATE` + tabular results). Route level
+`QueryTckCasesTest` (30 hand-transcribed openCypher TCK scenarios as a table over one fixture —
+no `.feature` reader, the TCK uses `CREATE` + tabular results; four are existential) and
+`QueryExistsScaleTest` (2.36.0: `EXISTS { … }` over 9 795 rows shaped like the sample — the four
+sample-query shapes finish under 200 000 checkpoints on a TICKING clock charging 1 µs per read
+(the deterministic "inside 2 s" proof, exact result counts), the real-clock run only LOGS elapsed
+ms, an adversarial `*1..10` block is `DEADLINE_EXCEEDED` deterministically, an uncorrelated block
+is refused before any evaluation, and every row refuses to decode its `properties` so a
+per-candidate document decode fails loudly; `QueryParserTest`/`QueryValidatorTest`/`QueryValuesTest`/
+`QueryEvaluatorTest` carry the `EXISTS` grammar, scoping, short-circuit, null-anchor and
+budget-from-inside-a-block cases, `EntityQueryRouteTest` a `NOT EXISTS` graph read and an
+uncorrelated `/query/check` with a 1-based position). Route level
 (`EntityQueryRouteTest`): a
 query narrowing the graph under the unchanged both-ends rule, a traversal THROUGH an entity the
 `blueprint` filter hides (never drawn), `-[:$team]->` from an Inherited-team entity, a hierarchy
