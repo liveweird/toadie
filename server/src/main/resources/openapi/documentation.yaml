@@ -3805,7 +3805,8 @@ components:
       schema: { type: string, maxLength: 2000 }
       description: >-
         An entity query (2.0.0 — `.claude/docs/entity-query-language.md`): a read-only,
-        openCypher-shaped subset (`MATCH`+, trailing `OPTIONAL MATCH`*, `WHERE`, `RETURN` of
+        openCypher-shaped subset (`MATCH`+, trailing `OPTIONAL MATCH`*, `WHERE` — and, since
+        2.36.0, the correlated `EXISTS { pattern }` predicate in it — `RETURN` of
         node variables only, `LIMIT`) evaluated over the FULL active workspace; the entities
         its `RETURN` variables bind to become the shown set, intersected with the other
         filters. Blank is absent; repetition is `400`; longer than 2000 characters is a plain

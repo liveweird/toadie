@@ -25,6 +25,7 @@ const OPERATOR_KEYWORDS = [
   "IS",
   "DISTINCT",
   "OPTIONAL",
+  "EXISTS",
 ] as const;
 
 /** Literal keywords — tokenized/highlighted as atoms, not plain keywords. */

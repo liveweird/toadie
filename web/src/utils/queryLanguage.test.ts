@@ -34,6 +34,12 @@ describe("cypherStream", () => {
     expect(tokens.filter((t) => t.tag != null).every((t) => t.tag === "keyword")).toBe(true);
   });
 
+  test("highlights EXISTS as a keyword, braces as punctuation (2.36.0)", () => {
+    const tokens = tokenize("NOT exists { (s) }").filter((t) => t.tag != null);
+    expect(tokens[0]).toEqual({ text: "NOT", tag: "keyword" });
+    expect(tokens[1]).toEqual({ text: "exists", tag: "keyword" });
+  });
+
   test("tokenizes TRUE/FALSE/NULL as atoms", () => {
     expect(tokenize("true FALSE Null").map((t) => t.tag).filter(Boolean)).toEqual(["atom", "atom", "atom"]);
   });
@@ -188,6 +194,7 @@ describe("quoteIfNeeded", () => {
     expect(quoteIfNeeded("NULL")).toBe("`NULL`");
     expect(quoteIfNeeded("Order")).toBe("`Order`");
     expect(quoteIfNeeded("as")).toBe("`as`");
+    expect(quoteIfNeeded("exists")).toBe("`exists`");
   });
 
   test("doubles an embedded backtick", () => {
