@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.35.0",
+    date: "2026-10-31",
+    en: `**The commerce/payments sample ontology, revised.** Teams carry a Teams channel instead of Slack; systems are typed on a six-value taxonomy (value-creation, shared-service, integration, data-and-reporting, infrastructure-and-platform, external) and the Backstage System type list is re-seeded to match, so a System file still typed product or capability shows a soft finding until it is edited; products are payment or non-payment; APIs no longer store an inline definition (the Backstage export writes a placeholder); services get an on-call link beside their cron schedule; adoptions declare a contract version; and every sample blueprint ships with fill-in tiers, aligned so that one property has one tier everywhere. A domain's critical-systems count now includes its sub-domains, a new saved query finds workloads running outside their cluster's environment, and in the Backstage world the Resource kind moves to tier 2.`,
+    pl: `**Przykładowa ontologia commerce/payments po rewizji.** Zespoły mają kanał Teams zamiast Slacka; systemy są typowane sześciowartościową taksonomią (value-creation, shared-service, integration, data-and-reporting, infrastructure-and-platform, external), a lista typów System w świecie Backstage została zasiana tak samo, więc plik System nadal typowany product lub capability pokazuje miękkie ostrzeżenie, dopóki ktoś go nie poprawi; produkty są płatnicze lub niepłatnicze; API nie przechowują już definicji inline (eksport do Backstage zapisuje zastępczy tekst); usługi dostają link do grafiku dyżurów obok harmonogramu cron; adopcje deklarują wersję kontraktu; a każdy przykładowy blueprint ma priorytety wypełniania, uzgodnione tak, by ta sama właściwość miała wszędzie ten sam poziom. Licznik krytycznych systemów domeny obejmuje teraz jej poddomeny, nowe zapisane zapytanie znajduje workloady działające poza środowiskiem swojego klastra, a w świecie Backstage rodzaj Resource przechodzi na poziom 2.`,
+  },
+  {
     version: "2.34.2",
     date: "2026-10-30",
     en: `**One Java build throughout.** Toadie now builds, tests and runs its server on the same Temurin 21.0.12.1 Java build; until now only the runtime image used it. Nothing changes in how Toadie looks or behaves.`,
