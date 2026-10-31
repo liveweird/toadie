@@ -5,7 +5,7 @@ This standalone Port demo models a commerce and payments platform as two depende
 - [`blueprints/`](blueprints/) contains fifteen numbered blueprint definitions.
 - [`entities/`](entities/) contains fifteen numbered files with 76 entity instances.
 
-A third, optional set, [`queries/`](queries/), holds nine public saved entity queries that
+A third, optional set, [`queries/`](queries/), holds thirteen public saved entity queries that
 focus the Entity graph and Entity hierarchy canvases on the adoption, product, dataset and
 regulatory-flag and deployment models. It is loaded after the entities.
 
@@ -160,14 +160,23 @@ the Entity graph and Entity hierarchy pages; picking one runs it. Their names st
 | Query | Shows | Nodes |
 |---|---|---:|
 | API consumption (who uses which API) | each `api_adoption` with its consuming service and the API it declares | 11 |
-| Dataset consumption (who reads which dataset) | the same for `dataset_adoption` | 9 |
-| Adoptions in flight (migrating or retiring) | API and dataset adoptions whose `status` is `migrating` or `retiring`, with consumer and target | 12 |
+| Dataset consumption (who reads which dataset) | the same for `dataset_adoption` | 8 |
+| Adoptions in flight (migrating or retiring) | API and dataset adoptions whose `status` is `migrating` or `retiring`, with consumer and target | 11 |
 | Products and the systems that deliver them | every `product` with the systems whose `products` relation names it | 10 |
 | Dataset ownership and lineage | every `dataset` with its owning team, producing services and consuming services | 14 |
 | PCI-DSS services and what they touch | services with `pci_dss: true`, their system, and everything they use, consume, produce or depend on | 11 |
 | DORA critical functions and their footprint | services with `dora_cif: true`, their system, resources and owning teams | 9 |
 | Banking-outsourcing scope across blueprints | services, APIs, resources and datasets with `banking_outsourcing` true, with their system | 12 |
 | Workloads outside their cluster's environment | workloads whose environment differs from their cluster's (a shared non-prod cluster hosting a test workload) | 4 |
+| API consumption without a declared adoption | each `consumes_apis` pair that has no `api_adoption` naming both the service and the API (`NOT EXISTS`) | 10 |
+| API adoptions whose consumer does not list the API | each `api_adoption` whose consumer's `consumes_apis` lacks the API it declares | 3 |
+| Dataset consumption without a declared adoption | the `consumes_datasets` twin of the first | 6 |
+| Dataset adoptions whose consumer does not list the dataset | the `consumes_datasets` twin of the second | 3 |
+
+The last four use the `NOT EXISTS { … }` predicate (2.36.0) to cross-check the double bookkeeping
+of relation and adoption in both directions. They are deliberately non-empty: eight consumptions
+have no declared adoption, and two `retiring` declarations (`checkout-service` → `acquirer-rest`,
+`settlement-pipeline` → `orders`) name a consumer that no longer lists the API or dataset.
 
 `queries/load.sh` takes its environment variables from its own header. A query is parsed when saved but only checked against the blueprints when applied, so load the
 blueprints and entities first. Rows are owned by the loading user and a name is unique per

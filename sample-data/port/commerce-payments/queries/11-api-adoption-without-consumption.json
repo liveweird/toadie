@@ -1,0 +1,5 @@
+{
+  "name": "Sample: API adoptions whose consumer does not list the API",
+  "visibility": "PUBLIC",
+  "query": "MATCH (ad:api_adoption)-[:consumer]->(s:service), (ad)-[:api]->(a:api)\nWHERE NOT EXISTS { (s)-[:consumes_apis]->(a) }\nRETURN ad, s, a"
+}

@@ -38,14 +38,15 @@
   },
   {
     "blueprint": "api_adoption",
-    "identifier": "checkout-service-payments-grpc",
-    "title": "checkout-service → payments-grpc v1",
+    "identifier": "checkout-service-acquirer-rest",
+    "title": "checkout-service → acquirer-rest v1",
     "properties": {
       "contract_version": "v1",
       "status": "retiring",
       "declared_by": "marek.nowak",
-      "verified_at": "2026-05-10T08:00:00Z"
+      "verified_at": "2026-05-10T08:00:00Z",
+      "notes": "Direct acquirer calls moved behind payments-gateway; the declaration is retiring."
     },
-    "relations": { "consumer": "checkout-service", "api": "payments-grpc", "environment": "staging" }
+    "relations": { "consumer": "checkout-service", "api": "acquirer-rest", "environment": "staging" }
   }
 ]
