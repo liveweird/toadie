@@ -38,7 +38,7 @@ mcp-kotlin-sdk = "0.15.0"
 # needing a newer Netty lifts only ITS modules - `:server:checkDependencyAlignment` fails on that
 # drift). Keep the two in step: reactor-netty is versioned by the `reactor-bom` line below (read
 # its Netty version off reactor-netty's pom).
-netty = "4.2.19.Final"
+netty = "4.2.20.Final"
 # Move together: each opentelemetry-ktor-3.0 alpha requires exactly one SDK (2.33.0-alpha -> 1.67.0);
 # a mismatched pair breaks at startup (NoClassDefFoundError from api-incubator).
 opentelemetry = "1.67.0"
