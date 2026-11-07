@@ -27,7 +27,7 @@ buildscript {
             classpath("org.apache.logging.log4j:log4j-api:2.26.1")
             // CVE-2026-102554 (Guava DoS during deserialization, fixed in 33.7.2): the plugin
             // pulls 32.1.2-jre. Keep in step with the `guava` catalog line.
-            classpath("com.google.guava:guava:33.7.2-jre")
+            classpath("com.google.guava:guava:33.8.0-jre")
         }
     }
 }
