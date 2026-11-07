@@ -29,7 +29,7 @@ RUN GIT_SHA=$(git rev-parse --short HEAD) \
 # run a later respin ahead.
 # Every FROM is also pinned by multi-arch index digest (tag@sha256:...): the tag stays readable
 # and Dependabot's docker ecosystem bumps tag and digest together.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:21.0.12.1_1-jdk@sha256:5d90b26c0784ccf55af55f97cbcf7f3969c66a06299c93bdc72649219942a48f AS server
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21.0.13_9-jdk@sha256:ebfbb18d11ff163ee83b21258acf12248af48d22a0fdfdc68fa1a1516c05976a AS server
 WORKDIR /src
 # Copy build scripts + wrapper first so the Gradle distribution download caches.
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -52,7 +52,7 @@ RUN ./gradlew :server:installDist --no-daemon
 # the OS-layer scan goes red, move to the newest clean base for this update (a new digest or a later
 # respin tag, which may run ahead of the JDK stage), never a runtime-only jump to a later update,
 # never an ignore file.
-FROM eclipse-temurin:21.0.12.1_1-jre@sha256:f37956012e0cb88400e5b3689aeae2d2d735364c1922ae2225536163b5a99f56 AS runtime
+FROM eclipse-temurin:21.0.13_9-jre@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a AS runtime
 # Non-root runtime user: the base image's default user is root, and the application never
 # needs to bind a privileged port (8081) or write outside its own install directory. Created
 # BEFORE the COPYs so `--chown` sets ownership in the copy layers themselves — a trailing
