@@ -3,8 +3,10 @@ package ch.nokillswit.catalog
 import ch.nokillswit.infra.concurrency.ReadBudgetExceeded
 import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.infra.concurrency.throwReadBudgetHttp
+import ch.nokillswit.infra.db.FieldChange
 import ch.nokillswit.infra.db.jsonTextAt
 import ch.nokillswit.infra.db.octetLength
+import ch.nokillswit.infra.db.sourceUrlChange
 import ch.nokillswit.infra.fetch.MAX_FETCH_URL_LENGTH
 import ch.nokillswit.infra.fetch.SourceWrite
 import ch.nokillswit.infra.fetch.sanitizedSourceUrl
