@@ -6,14 +6,14 @@ import ch.nokillswit.catalog.CatalogFileMetadata
 import ch.nokillswit.catalog.CatalogLink
 import ch.nokillswit.catalog.EntityProfile
 import ch.nokillswit.catalog.EntitySpec
-import ch.nokillswit.catalog.MAX_CHANGE_VALUE_LENGTH
 import ch.nokillswit.catalog.catalogFileCreationEvent
 import ch.nokillswit.catalog.catalogFileDeletionEvent
 import ch.nokillswit.catalog.catalogFileSyncEvent
 import ch.nokillswit.catalog.catalogFileUpdateEvent
 import ch.nokillswit.catalog.documentChanges
-import ch.nokillswit.catalog.encodeChanges
-import ch.nokillswit.catalog.sourceUrlChange
+import ch.nokillswit.infra.db.MAX_CHANGE_VALUE_LENGTH
+import ch.nokillswit.infra.db.encodeChanges
+import ch.nokillswit.infra.db.sourceUrlChange
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

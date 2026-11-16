@@ -28,7 +28,8 @@ ch.nokillswit
 │                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
 │                       jsonArrayContains, orVanished) + EventLog.kt/JsonParams.kt (Lettuce's
 │                       shared per-record audit-event machinery — the EventLogTable base behind
-│                       catalog_file_events, the first and so far only clone) + Locking.kt
+│                       catalog_file_events, the first and so far only clone) + EventChanges.kt (the shared
+│                       field-diff vocabulary — FieldChange, encodeChanges — for reuse by entity history) + Locking.kt
 │                       (lockingTransaction — the shared cooperating-writer table-lock helper
 │                       behind BlueprintService/TagCategoryService/EntityService's V27/V11/V28
 │                       protocols) + MultiRowInsert.kt (Flow's parameterized multi-row `INSERT ... ON CONFLICT DO
@@ -454,7 +455,8 @@ ch.nokillswit
                         real run and the dry-run cannot drift);
                         CatalogFileEvents.kt — the history vocabulary: the event types, the pure
                         descriptor builders, and `documentChanges` (the generic field-level diff
-                        of two documents) + CatalogFileEventService.kt (the EventLogTable clone
+                        of two documents, encoded through infra/db/EventChanges.kt's shared
+                        FieldChange vocabulary) + CatalogFileEventService.kt (the EventLogTable clone
                         behind GET …/{id}/events — the editor's History section);
                         Errors.kt — the reference resolver + registry/stored-content checks
                         behind GET …/errors (the filterable workspace Errors report: soft

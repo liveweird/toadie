@@ -107,7 +107,7 @@ export default function CatalogFileEditor({
           <Grid.Col span={12}>
             <Paper withBorder p="lg" radius="md">
               <Stack>
-                <Title order={3}>{t("catalog.history.title")}</Title>
+                <Title order={3}>{t("common.history.title")}</Title>
                 {history}
               </Stack>
             </Paper>
