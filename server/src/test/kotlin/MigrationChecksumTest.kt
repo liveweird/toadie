@@ -70,6 +70,7 @@ class MigrationChecksumTest {
         "V48__sso_identity.sql" to -1309986979,
         "V49__auth_sessions_id_token.sql" to -429125950,
         "V50__system_types_taxonomy.sql" to -752586780,
+        "V51__create_entity_events.sql" to -667490293,
     )
 
     @Test

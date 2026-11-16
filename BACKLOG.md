@@ -54,6 +54,17 @@ promotes it. A finished item is removed, not ticked.
 
 - [new] **Adoption/relation consistency as Errors-report rows.** 2.36.0 ships the check as four PUBLIC sample saved queries (NOT EXISTS over the consumes_* relation and the adoption pair, both directions). What remains is surfacing a saved query's non-empty result on Port Errors without naming the ontology — which means EVALUATING chosen saved queries inside the report, against its never-evaluates rule and the entity-query budget/permits. Decide the mechanism (a "check" flag on saved queries + a per-report evaluation cap) before promoting.
 
+- [new] **Review entity history growth with real numbers.** 2.37.0 keeps `entity_events` forever
+  (immutable, like `catalog_file_events`): every event is bounded (40 paths, 4,000 characters of
+  values) and a no-op save mints nothing, but a write loop that really changes values, repeated syncs
+  and team renames (one event per referrer) all add rows. Watch "Entity history events" in the
+  telemetry Workspace section and decide on retention (newest N per entity, or an age prune) only
+  once there is data.
+
+- [new] **An MCP `get_entity_history` tool.** 2.37.0 serves entity history over REST only
+  (`GET /api/v1/entities/{id}/events`); the MCP catalogue is a fixed ten tools. Add a read-scope tool
+  returning the same paged events when an agent needs to ask who changed what.
+
 - [new] **Bulk change of one property across entities of the same blueprint.** Requested
   2026-11-16, to follow the entity change history. A "Bulk change" button on the Entities, Entity
   graph and Entity hierarchy views opens a new view shaped like Entity hierarchy, except that the

@@ -44,6 +44,7 @@ class NegativeIdTest {
         )
         assertNegative400(client.get("/api/v1/entities/-1"))
         assertNegative400(client.get("/api/v1/entities/-1/sync"))
+        assertNegative400(client.get("/api/v1/entities/-1/events"))
         assertNegative400(
             client.postJson(
                 "/api/v1/entities/-1/sync",

@@ -5,6 +5,7 @@ import ch.nokillswit.blueprints.BlueprintSchema
 import ch.nokillswit.blueprints.BlueprintTiers
 import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
+import ch.nokillswit.entities.EntityEventType
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.findByIdentity
 import ch.nokillswit.integration.IntegrationScope
@@ -596,6 +597,13 @@ class IntegrationMcpTest {
                 ).rpc()
                 val updatedContent = updated["result"]!!.jsonObject["structuredContent"]!!.jsonObject
                 assertEquals("UPDATED", updatedContent["status"]!!.jsonPrimitive.content)
+
+                // The entity's history (V51): an MCP write is an import-pipeline write attributed to the service account.
+                val history = TestEntityEvents.of(storedId)
+                assertEquals(listOf(EntityEventType.CREATED, EntityEventType.UPDATED), history.map { it.type })
+                assertTrue(history.all { it.userId == serviceUserId && it.userServiceAccount }, history.toString())
+                assertTrue(history.all { it.params["origin"] == "import" }, history.toString())
+                assertEquals(listOf("properties.note"), history.last().params["changed"]?.split(","))
             }
         } finally {
             TestIntegrationClients.service.revoke(clientId)
@@ -703,13 +711,19 @@ class IntegrationMcpTest {
         val entId = unique("ent-mcp-delete")
         try {
             TestBlueprints.service.create(simpleBlueprint(bpId), owner)
-            TestEntities.service.create(EntityRequest(blueprint = bpId, identifier = entId, title = "T"), owner)
+            val stored = TestEntities.service.create(EntityRequest(blueprint = bpId, identifier = entId, title = "T"), owner)
             val client = jsonClient()
             val deleteParams = toolCallParams("delete_entity", buildJsonObject { put("blueprint", bpId); put("identifier", entId) })
             val first = client.mcp(key, "tools/call", deleteParams).rpc()
             val firstResult = first["result"]!!.jsonObject
             assertNotEquals(true, firstResult["isError"]?.jsonPrimitive?.booleanOrNull) // the SDK encodes a null isError explicitly
             assertEquals(true, firstResult["structuredContent"]!!.jsonObject["deleted"]!!.jsonPrimitive.boolean)
+
+            // The delete mints DELETED (V51), attributed to the client's service account, not the entity's creator.
+            val deletion = TestEntityEvents.of(stored.id).last()
+            assertEquals(EntityEventType.DELETED, deletion.type)
+            assertTrue(deletion.userServiceAccount)
+            assertNotEquals(owner, deletion.userId)
 
             val second = client.mcp(key, "tools/call", deleteParams).rpc()
             val secondResult = second["result"]!!.jsonObject

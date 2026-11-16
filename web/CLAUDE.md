@@ -650,6 +650,16 @@ Events arrive **structural** (`type` + a `params` string map, no rendered text �
 - **A field recorded by name only gets no body line** — the sentence above already lists it, and free text (description, definition) has no value to show by design.
 - The shell (named `status` spinner / error Alert / empty note / Timeline with the `who · when` line / bare Pagination, plus an optional `footer` node) is the shared `components/EventTimeline.tsx` — the Toadie counterpart of Lettuce's, taking finished `{key, title, lines, who, when}` items — and the body lines come from `utils/eventChanges.ts` (`changedPaths`, `changeLine`); the generic strings live under `common.history.*` (`title`, `empty`, `change.*`), while `describeEvent`, `FIELD_LABELS` and the `catalog.event.*`/`catalog.history.*` sentences stay with this component.
 
+## Entity history (`components/EntityHistory.tsx`)
+
+The catalog history's twin for Port entities (server: `GET /api/v1/entities/{id}/events`, `api/entities.ts#listEntityEvents`), rendered in a full-width **History** section under the Edit page's two columns (`EntityEditor`'s optional `history` prop; `CreateEntity` passes nothing). Same shell (`EventTimeline`) and body-line vocabulary (`utils/eventChanges.ts`), own query, sentences and labels:
+
+- **Query key** `["entities", "events", id, page]`, page size 10, newest-first and never re-sorted. It sits inside the `["entities"]` prefix, so the entity save (`useEntitySave`) and sync (`SyncEntityModal`) flows refresh it with no extra invalidation.
+- **Sentences** go through LITERAL keys (`entities.event.*`: created, createdImport, updated, updatedImport, updatedImportDeferred, updatedCascade, synced, syncedChanges, deleted) selected by `type` and `params.origin` (`import`, `import-deferred`, `cascade` — the cascade sentence names `causeBlueprint`/`causeFrom`/`causeTo` and falls back to plain "updated" without them); an unknown origin or event type degrades to the plain sentence / the raw type, never blank. Extra lines: `more` ("…and N more fields") and `cascaded` ("N referring entities updated"), both pluralized (`entities.history.*`, PL one/few/many/other).
+- **Field labels**: the envelope fields reuse `entities.field.*`; `properties.<id>` / `relations.<id>` take the TITLE the blueprint gives them (what the form shows) and fall back to the raw id once the blueprint no longer declares it (the entity can outlive a property).
+- **Actor suffix** (`common.history.actor.*`): "(integration client)", "(revoked integration client)" for a deleted service account, "(deleted)" for a deleted person. Applied ONLY here — the catalog history stays byte-identical.
+- **Pre-history footer** (`EventTimeline`'s `footer` slot): entities that predate the history carry no CREATED event, so on the LAST page, when its oldest event is not CREATED (or there are no events), a note names `entity.creatorName`/`createdAt` ("…before change history was recorded. Earlier changes are not shown."). Never on earlier pages, never on a failed load.
+
 ## Telemetry panel (`components/TelemetryPanel.tsx`)
 
 The ADMIN-only, hideable panel showing Toadie's own vital signs (the server side: `.claude/docs/observability.md` "Telemetry"; the wire: `GET /api/v1/telemetry/current` and `/history`, `api/telemetry.ts`). A port of Flow's panel; Workspace and Pressure are Toadie's own sections.

@@ -3476,6 +3476,51 @@ paths:
         '502': { $ref: '#/components/responses/BadGateway' }
         '500': { $ref: '#/components/responses/InternalServerError' }
 
+  /api/v1/entities/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      tags: [entities]
+      operationId: listEntityEvents
+      summary: List an entity's change history
+      description: |
+        The entity's immutable audit trail — one entry per creation (the import loop and MCP
+        writes included), edit, HTTP re-sync, rename-cascade rewrite of a reference, and
+        deletion — newest first (`timestamp` descending, `id` descending as the same-instant
+        tiebreaker).
+
+        Every event commits in the same transaction as the entity write it records, so a
+        stored change can never lack its event. Each entry is STRUCTURAL: an event `type`
+        plus a `params` map, with the acting user resolved to `userName` (and flagged when
+        that account was since deleted, or is an integration client's service account). No
+        rendered string is stored — clients localize the description. Any authenticated user
+        may read it: whoever may read the entity may read its history, and in this shared
+        workspace that is everyone. A missing or soft-deleted entity is a `404`. A pure read:
+        no audit event.
+
+        Events are server-generated as a side-effect of the mutations; there is no create,
+        update or delete operation. A save that changed nothing records nothing; a sync is
+        recorded even when the remote copy matched. Entities that predate change history
+        simply have no `CREATED` entry. There is no retention: the history is never pruned.
+
+        Sortable fields: `timestamp`, `id`. Unlike the other lists this one defaults to
+        `-timestamp,-id`.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: The entity's events, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityEventPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalServerError' }
+
   /api/v1/entities/{id}/sync:
     parameters:
       - $ref: '#/components/parameters/ResourceId'
@@ -6524,6 +6569,76 @@ components:
             A mismatch with the current reference refuses sync with 409; omitted by legacy
             clients. Send the stored HTTPS URL before any fetch-URL normalization.
 
+    EntityEventResponse:
+      type: object
+      required: [id, entityId, userId, userName, userDeleted, userServiceAccount, timestamp, type, params]
+      properties:
+        id: { type: integer, format: int32, minimum: 0 }
+        entityId: { type: integer, format: int32, minimum: 0 }
+        userId: { type: integer, format: int32, minimum: 0 }
+        userName:
+          type: string
+          description: Display name of the account that made the change. Server-resolved, read-only.
+        userDeleted:
+          type: boolean
+          description: The acting account has since been soft-deleted (the recorded name is still shown).
+        userServiceAccount:
+          type: boolean
+          description: The acting account is an integration client's service account — the change arrived through the MCP endpoint.
+        timestamp:
+          type: integer
+          format: int64
+          description: Epoch milliseconds when the event was recorded. Server-managed.
+        type:
+          type: string
+          enum: [CREATED, UPDATED, SYNCED, DELETED]
+          description: >-
+            Structured event kind; the client renders it in the viewer's language. DELETED
+            entries exist for the record but are unreachable through the API — the entity
+            they belong to is gone from every read.
+        params:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Interpolation params for the localized rendering. `CREATED` carries `blueprint`.
+            `origin` marks how the write arrived when it was not an ordinary edit: `import`
+            (the bulk import, the conversion import and every MCP write), `import-deferred`
+            (the import's second pass restoring the references the first pass withheld) or
+            `cascade` (a referrer rewritten because another entity was renamed; carries
+            `causeEntityId`, `causeBlueprint`, `causeFrom` and `causeTo`). A renamed entity's
+            own event carries `cascaded`, the number of referrers rewritten.
+
+            `UPDATED` and `SYNCED` carry the field-level diff: `changed` comma-joins the
+            changed field paths in document order (`identifier`, `title`, `icon`, `team`,
+            `properties.<id>`, `relations.<id>`, plus the `sourceUrl` pseudo-field for the
+            source reference), and each path may be followed by `<path>.from`/`<path>.to`
+            (scalars) or `<path>.added`/`<path>.removed` (lists of scalars, comma-joined). At
+            most 40 paths are listed; `more` counts the rest.
+
+            A path in `changed` with NO companion keys is recorded by name only: document
+            text (properties whose format is yaml, markdown or proto, or that carry an inline
+            `spec`), a property the blueprint no longer declares, objects, lists of objects,
+            list items containing a comma, any value over 200 characters, a list whose entries
+            were duplicated or reshaped without a different member, and every value once the
+            event's 4,000-character value budget is spent. `DELETED` carries no params;
+            `SYNCED` carries none when the remote copy matched.
+
+    EntityEventPage:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityEventResponse'
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Event count before pagination.
+
     EntityPage:
       type: object
       required: [items, page, pageSize, total]
@@ -7275,7 +7390,7 @@ components:
       required: [name, count]
       properties:
         name: { type: string, description: The table. }
-        count: { type: integer, format: int64, minimum: 0, description: Active rows (all rows for the append-only `catalog_file_events`). }
+        count: { type: integer, format: int64, minimum: 0, description: Active rows (all rows for the append-only `catalog_file_events` and `entity_events`). }
     TelemetryRequests:
       type: object
       required: [windowSeconds, percentileWindowSeconds, measuredAt, total, routes]

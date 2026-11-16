@@ -101,6 +101,7 @@ class StorageCollectorsTest {
             assertEquals(before.getValue("entities") + 1, during.getValue("entities"))
             assertEquals(before.getValue("catalog_files") + 1, during.getValue("catalog_files"))
             assertEquals(before.getValue("catalog_file_events") + 1, during.getValue("catalog_file_events"), "the created event")
+            assertEquals(before.getValue("entity_events") + 1, during.getValue("entity_events"), "the entity's created event")
 
             assertEquals(HttpStatusCode.NoContent, client.delete("$CATALOG_FILES_PATH/${created.id}").status)
             TestEntities.remove(ent)
@@ -111,6 +112,10 @@ class StorageCollectorsTest {
             assertEquals(before.getValue("catalog_files"), after.getValue("catalog_files"))
             val events = after.getValue("catalog_file_events")
             assertEquals(before.getValue("catalog_file_events") + 2, events, "created + deleted: history outlives the file")
+            assertEquals(
+                before.getValue("entity_events") + 2, after.getValue("entity_events"),
+                "created + deleted: the entity's history outlives it, so the append-only table counts every event",
+            )
             val stored = independentCount("catalog_files", activeOnly = false)
             assertTrue(stored > after.getValue("catalog_files"), "the soft-deleted row is still stored")
             assertTrue(independentCount("entities", activeOnly = false) > after.getValue("entities"))

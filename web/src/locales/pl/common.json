@@ -135,6 +135,11 @@
       "added": "{{label}}: +{{added}}",
       "removed": "{{label}}: −{{removed}}",
       "addedRemoved": "{{label}}: +{{added}} −{{removed}}"
+    },
+    "actor": {
+      "serviceAccount": "{{name}} (klient integracyjny)",
+      "serviceAccountRevoked": "{{name}} (odwołany klient integracyjny)",
+      "deleted": "{{name}} (konto usunięte)"
     }
   }
 }

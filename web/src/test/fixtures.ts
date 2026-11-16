@@ -6,7 +6,7 @@
 import type { CatalogFileListItem, CatalogFileResponse } from "../api/catalogFiles";
 import type { Blueprint } from "../api/blueprints";
 import type { ConversionMapping } from "../api/conversionMappings";
-import type { EntityErrorsReport } from "../api/entities";
+import type { Entity, EntityErrorsReport } from "../api/entities";
 
 const EPOCH = 1_700_000_000_000;
 
@@ -41,6 +41,27 @@ export function blueprintResponse(overrides: Partial<Blueprint> = {}): Blueprint
     createdAt: EPOCH,
     updatedAt: EPOCH,
     system: false,
+    lastSyncedAt: 0,
+    ...overrides,
+  };
+}
+
+/** An `Entity` row — a `service` entity with no properties, relations or findings. */
+export function entityResponse(overrides: Partial<Entity> = {}): Entity {
+  return {
+    id: 5,
+    blueprint: "service",
+    blueprintId: 1,
+    identifier: "checkout",
+    title: "Checkout",
+    properties: {},
+    relations: {},
+    findings: [],
+    createdBy: 1,
+    creatorName: "Alice Creator",
+    creatorDeleted: false,
+    createdAt: EPOCH,
+    updatedAt: EPOCH,
     lastSyncedAt: 0,
     ...overrides,
   };

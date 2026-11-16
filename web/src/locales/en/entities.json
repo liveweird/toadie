@@ -134,5 +134,23 @@
     "jsonInvalid": "Enter valid JSON",
     "objectShape": "Enter a URL and, optionally, a display text — nothing else",
     "sourceUrl": "Must be an absolute https URL without credentials"
+  },
+  "event": {
+    "created": "Entity created.",
+    "createdImport": "Entity created by import.",
+    "updated": "Entity updated: {{fields}}.",
+    "updatedImport": "Entity updated by import: {{fields}}.",
+    "updatedImportDeferred": "Entity updated by import (deferred references): {{fields}}.",
+    "updatedCascade": "Entity updated after {{blueprint}} “{{from}}” was renamed to “{{to}}”: {{fields}}.",
+    "synced": "Synced from the source — no changes.",
+    "syncedChanges": "Synced from the source: {{fields}}.",
+    "deleted": "Entity deleted."
+  },
+  "history": {
+    "more_one": "…and {{count}} more field",
+    "more_other": "…and {{count}} more fields",
+    "cascaded_one": "{{count}} referring entity updated",
+    "cascaded_other": "{{count}} referring entities updated",
+    "preHistory": "Created by {{name}} on {{date}}, before change history was recorded. Earlier changes are not shown."
   }
 }

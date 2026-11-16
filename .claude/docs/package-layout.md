@@ -28,8 +28,8 @@ ch.nokillswit
 │                       bootstrap (admin rotation, prod fail-closed) + Sql.kt (containsNormalized,
 │                       jsonArrayContains, orVanished) + EventLog.kt/JsonParams.kt (Lettuce's
 │                       shared per-record audit-event machinery — the EventLogTable base behind
-│                       catalog_file_events, the first and so far only clone) + EventChanges.kt (the shared
-│                       field-diff vocabulary — FieldChange, encodeChanges — for reuse by entity history) + Locking.kt
+│                       catalog_file_events and entity_events, V51) + EventChanges.kt (the shared
+│                       field-diff vocabulary — FieldChange, encodeChanges — shared by the catalog and entity histories) + Locking.kt
 │                       (lockingTransaction — the shared cooperating-writer table-lock helper
 │                       behind BlueprintService/TagCategoryService/EntityService's V27/V11/V28
 │                       protocols) + MultiRowInsert.kt (Flow's parameterized multi-row `INSERT ... ON CONFLICT DO
@@ -306,7 +306,12 @@ ch.nokillswit
 │                       `EntityService` also gains `syncFromSource`/`syncState` (the V37 source
 │                       reference & re-sync twin of the catalog's own, `.claude/docs/persistence.md`
 │                       "V37") and `EntityRoutes.kt` gains `POST …/entities/fetch` and
-│                       `GET`/`POST …/{id}/sync`.
+│                       `GET`/`POST …/{id}/sync`. Since 2.37.0 (V51) every write mints a history
+│                       event in its own transaction: EntityEvents.kt (the event vocabulary,
+│                       `EntityWriteKind`, the pure `entityChanges` diff and the `replaceEvent` /
+│                       `cascadeEvent` rules) + EntityEventService.kt (the `entity_events` table
+│                       over `infra/db/EventLog.kt`) — `persistence.md` "Entity mutations and
+│                       product history".
 │                       EntityImport.kt (phase 6, v1.28.0) — `POST …/entities/import` +
 │                       `/import/check`, any authenticated (no admin gate): the pure planner
 │                       (`planEntityImport`, ordering over relation/`team`/format-property

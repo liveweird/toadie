@@ -4,6 +4,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import EditEntity from "./EditEntity";
 import { jsonResponse } from "../test/http";
+import { entityResponse, pageOf } from "../test/fixtures";
 import { renderWithProviders } from "../test/render";
 
 type FetchMock = ReturnType<typeof vi.fn>;
@@ -272,5 +273,37 @@ describe("EditEntity page", () => {
 
     expect(await screen.findByText("No source")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sync from source" })).toBeDisabled();
+  });
+  test("the History section renders on edit and loads the entity's events", async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/blueprints") return Promise.resolve(jsonResponse(200, { items: BLUEPRINTS }));
+      if (url === "/api/v1/entities/5") return Promise.resolve(jsonResponse(200, entityResponse()));
+      if (url === "/api/v1/entities/5/events?page=1&pageSize=10") {
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            pageOf([
+              {
+                id: 1,
+                entityId: 5,
+                userId: 1,
+                userName: "Alice",
+                userDeleted: false,
+                userServiceAccount: false,
+                timestamp: 0,
+                type: "CREATED",
+                params: { blueprint: "service" },
+              },
+            ]),
+          ),
+        );
+      }
+      return Promise.resolve(jsonResponse(404, {}));
+    });
+
+    renderEdit();
+
+    expect(await screen.findByRole("heading", { name: "History" })).toBeInTheDocument();
+    expect(await screen.findByText("Entity created.")).toBeInTheDocument();
   });
 });

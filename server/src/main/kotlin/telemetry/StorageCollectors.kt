@@ -8,7 +8,7 @@ package ch.nokillswit.telemetry
  */
 internal val STORAGE_GROUPS: Map<String, List<String>> = linkedMapOf(
     "catalog" to listOf("catalog_files", "catalog_file_events"),
-    "ontology" to listOf("blueprints", "entities", "conversion_mappings", "ontology_revision"),
+    "ontology" to listOf("blueprints", "entities", "entity_events", "conversion_mappings", "ontology_revision"),
     "registries" to listOf("dictionary_entries", "labels", "annotation_keys", "tag_categories", "entity_types"),
     "views" to listOf("lenses", "entity_queries", "graph_layouts", "entity_graph_layouts"),
     "accounts" to listOf(
@@ -34,6 +34,7 @@ internal val COUNTED_TABLES: List<CountedTable> = listOf(
     CountedTable("conversion_mappings", activeOnly = true),
     CountedTable("lenses", activeOnly = true),
     CountedTable("entity_queries", activeOnly = true),
+    CountedTable("entity_events", activeOnly = false),
 )
 
 /** A belt-and-braces check on the one thing interpolated into SQL: a [COUNTED_TABLES] name, never input. */

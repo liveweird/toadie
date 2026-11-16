@@ -10,6 +10,7 @@ import { getEntity, updateEntity, type Entity } from "../api/entities";
 import { ApiError } from "../api/http";
 import EditPageLoadState from "../components/EditPageLoadState";
 import EntityEditor from "../components/EntityEditor";
+import EntityHistory from "../components/EntityHistory";
 import PageHeader from "../components/PageHeader";
 import SyncEntityModal from "../components/SyncEntityModal";
 import SyncStateText, { syncStateSource } from "../components/SyncStateText";
@@ -94,6 +95,7 @@ function EditEntityForm({ entity, blueprint }: { entity: Entity; blueprint: Blue
         computedTeam={teamValuesOf(entity.team)}
         computed={computedValuesOf(entity, blueprint)}
         actions={actions}
+        history={<EntityHistory entity={entity} blueprint={blueprint} />}
       />
       <SyncEntityModal
         target={syncTarget}

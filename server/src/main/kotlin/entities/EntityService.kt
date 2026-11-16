@@ -107,6 +107,8 @@ class EntityService(
      * passes the one shared instance (a test seam).
      */
     internal val readLedger: ReadLedger,
+    /** The entity history log (V51) every write below appends to inside its own transaction — one shared instance in production. */
+    internal val eventService: EntityEventService = EntityEventService(database),
 ) {
     /** `tryAcquire` only — a saturated instance answers `429` immediately rather than queueing a workspace load. */
     internal val querySlots = Semaphore(queryPermits)
@@ -491,6 +493,7 @@ class EntityService(
         request: EntityRequest,
         callerId: UInt,
         source: SourceWrite = SourceWrite.FromRequest,
+        kind: EntityWriteKind = EntityWriteKind.EDIT,
     ): EntityResponse {
         validateEntityRequest(request) // re-checked service-side so direct callers stay guarded
         val now = System.currentTimeMillis()
@@ -509,6 +512,7 @@ class EntityService(
             val findings = entityFindings(document, blueprint.definition, readSet.snapshot.targetExists, request.team)
             requireNoFindings(findings)
             val id = insertRow(request, blueprint.id, document, callerId, now, source)
+            eventService.recordInTransaction(id, callerId, entityCreationEvent(blueprint.identifier, kind))
             bumpOntologyRevision() // V39, ch.nokillswit.infra.db.OntologyRevision — one bump per committed write
             val row = joined().selectAll().where { Entities.id eq id }.singleOrNull()
                 ?: error("entity $id vanished between insert and read-back")
@@ -597,12 +601,14 @@ class EntityService(
     suspend fun update(
         id: UInt,
         request: EntityRequest,
+        actingUserId: UInt,
         source: SourceWrite = SourceWrite.FromRequest,
         expectedUpdatedAt: Long? = null,
+        kind: EntityWriteKind = EntityWriteKind.EDIT,
     ): EntityUpdateResult = writeTransaction {
         val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
             ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
-        applyUpdate(id, row, request, source, expectedUpdatedAt)
+        applyUpdate(id, row, request, actingUserId, source, expectedUpdatedAt, kind)
     }
 
     /**
@@ -612,14 +618,17 @@ class EntityService(
      * `sourceUrl`/sync-stamp write policy, `.claude/docs/persistence.md` "V37") and by [expectedUpdatedAt],
      * the import's optional write-version expectation: compared against the row as read under the lock,
      * BEFORE any validation or mutation (the "cheap row checks first" posture of `entities/EntitySync.kt`),
-     * and refused with [EntityStaleException]. Null = unguarded.
+     * and refused with [EntityStaleException]. Null = unguarded. [actingUserId] and [kind] decide the
+     * history event the write mints in this same transaction (`entities/EntityEvents.kt` [replaceEvent]).
      */
     internal suspend fun applyUpdate(
         id: UInt,
         row: ResultRow,
         request: EntityRequest,
+        actingUserId: UInt,
         source: SourceWrite,
         expectedUpdatedAt: Long? = null,
+        kind: EntityWriteKind = EntityWriteKind.EDIT,
     ): EntityUpdateResult {
         if (expectedUpdatedAt != null && row[Entities.updatedAt] != expectedUpdatedAt) {
             throw EntityStaleException(STALE_CHANGED)
@@ -672,19 +681,22 @@ class EntityService(
         requireNoFindings(entityFindings(document, currentBlueprint.definition, targetExists, team))
 
         val finalRequest = request.copy(team = team, properties = document.properties, relations = document.relations)
-        val affected = replaceRow(id, row, finalRequest, source, now)
-        if (affected == 0) return EntityUpdateResult(0, emptyList(), null)
+        val resolved = replaceRow(id, row, finalRequest, source, now) ?: return EntityUpdateResult(0, emptyList(), null)
         // V39 — a PUT always bumps, even a byte-identical resubmission (updatedAt already does
         // the same unconditionally, `.claude/docs/persistence.md`'s "D2" rule); shared by
         // `update` and `entities/EntitySync.kt`'s `syncFromSource`, which both call this.
         bumpOntologyRevision()
 
         val cascaded = if (renamed) {
-            cascadeRename(activeBlueprints, currentBlueprint.identifier, currentIdentifier, request.identifier, excludingId = id)
+            val cause = CascadeCause(id, currentBlueprint.identifier, currentIdentifier, request.identifier)
+            cascadeRename(activeBlueprints, cause, actingUserId)
         } else {
             emptyList()
         }
-        return EntityUpdateResult(affected, cascaded, if (renamed) currentIdentifier else null, updatedAt = now)
+        val changes = entityChanges(row.toEventState(), finalRequest.toEventState(resolved.sourceUrl), currentBlueprint.definition)
+        replaceEvent(kind, source is SourceWrite.Synced, changes, cascaded.size)
+            ?.let { eventService.recordInTransaction(id, actingUserId, it) }
+        return EntityUpdateResult(1, cascaded, if (renamed) currentIdentifier else null, updatedAt = now)
     }
 
     /**
@@ -697,11 +709,13 @@ class EntityService(
      */
     private suspend fun cascadeRename(
         activeBlueprints: List<ActiveBlueprint>,
-        blueprintIdentifier: String,
-        oldIdentifier: String,
-        newIdentifier: String,
-        excludingId: UInt,
+        cause: CascadeCause,
+        actingUserId: UInt,
     ): List<String> {
+        val blueprintIdentifier = cause.blueprint
+        val oldIdentifier = cause.from
+        val newIdentifier = cause.to
+        val excludingId = cause.entityId
         val format = systemFormatFor(blueprintIdentifier)
         val candidateBlueprintIds =
             if (format != null) activeBlueprints.map { it.id } else referrerBlueprintIds(activeBlueprints, blueprintIdentifier)
@@ -735,6 +749,8 @@ class EntityService(
                 it[team] = newTeam?.let { t -> blueprintJson.encodeToString(t) }
                 it[updatedAt] = now
             }
+            val rewritten = cascadeRewrite(candidate, candidateBlueprint.definition, candidateDocument, storedTeam, newDocument, newTeam)
+            eventService.recordInTransaction(candidate[Entities.id].value, actingUserId, cascadeEvent(rewritten, cause))
             cascaded += "${candidateBlueprint.identifier}/${candidate[Entities.identifier]}"
         }
         return cascaded
@@ -753,7 +769,7 @@ class EntityService(
      * blueprint, plus — for `_team`/`_user` (Phase 4) — the `team` column / `format: team|user`
      * property values; a self-reference never blocks.
      */
-    suspend fun delete(id: UInt): EntityDeleteResult = writeTransaction {
+    suspend fun delete(id: UInt, actingUserId: UInt): EntityDeleteResult = writeTransaction {
         val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
             ?: return@writeTransaction EntityDeleteResult(0, null, null)
         val activeBlueprints = loadActiveBlueprints()
@@ -767,7 +783,10 @@ class EntityService(
             throw EntityReferencedException(target, referrers)
         }
         val affected = Entities.update({ (Entities.id eq id) and active() }) { it[markedAsDeleted] = true }
-        if (affected > 0) bumpOntologyRevision() // V39
+        if (affected > 0) {
+            eventService.recordInTransaction(id, actingUserId, entityDeletionEvent())
+            bumpOntologyRevision() // V39
+        }
         EntityDeleteResult(affected, blueprint.identifier, identifier)
     }
 

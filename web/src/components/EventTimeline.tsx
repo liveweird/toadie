@@ -81,8 +81,8 @@ export default function EventTimeline({
       <Timeline bulletSize={12} lineWidth={2}>
         {items.map((item) => (
           <Timeline.Item key={item.key} title={item.title}>
-            {item.lines.map((line) => (
-              <Text key={line} size="sm" c="dimmed">
+            {item.lines.map((line, index) => (
+              <Text key={`${index}:${line}`} size="sm" c="dimmed">
                 {line}
               </Text>
             ))}

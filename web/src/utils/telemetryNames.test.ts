@@ -10,7 +10,8 @@ describe("telemetryNames", () => {
   test("known groups and tables read in words, an unknown name reads as itself", () => {
     expect(workspaceGroupName("registries", t)).toBe("Registries");
     expect(workspaceGroupName("future_group", t)).toBe("future_group");
-    expect(workspaceTableName("catalog_file_events", t)).toBe("History events");
+    expect(workspaceTableName("catalog_file_events", t)).toBe("File history events");
+    expect(workspaceTableName("entity_events", t)).toBe("Entity history events");
     expect(workspaceTableName("future_table", t)).toBe("future_table");
   });
 

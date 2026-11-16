@@ -481,7 +481,7 @@ besides the database itself.
 - **Requirement:** what is recorded is numbers and fixed-vocabulary labels only - the process identity (pod/container name, JVM
   start, optional build version/commit), memory and CPU figures, the pool, per-route request counts, latencies, 5xx and 429 counts,
   pressure figures (read-ledger bytes, permits, queue depths, refusal counts), the database and table-group sizes, and the active
-  row counts of six workspace tables plus all rows of `catalog_file_events`. The never-recorded list lives only in
+  row counts of six workspace tables plus all rows of `catalog_file_events` and `entity_events`. The never-recorded list lives only in
   `.claude/docs/observability.md` "Telemetry". Cardinality is bounded by construction, because a registered metric name is never
   evicted and a label is a stored row: route labels come from the `isLabelled` shape rule over the real routing tree
   (`observability.md` lists them) and `*`; Ktor's per-route instruments are admitted by `TelemetryRegistry` only for ROUTED calls

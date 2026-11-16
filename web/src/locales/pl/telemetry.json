@@ -63,7 +63,8 @@
     },
     "table": {
       "catalog_files": "Pliki katalogu",
-      "catalog_file_events": "Zdarzenia historii",
+      "catalog_file_events": "Zdarzenia historii plików",
+      "entity_events": "Zdarzenia historii encji",
       "blueprints": "Blueprinty",
       "entities": "Encje",
       "conversion_mappings": "Mapowania konwersji",
