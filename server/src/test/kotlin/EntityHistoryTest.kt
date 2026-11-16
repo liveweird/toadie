@@ -415,6 +415,40 @@ class EntityHistoryTest {
     }
 
     @Test
+    fun `a bulk write mints an UPDATED event with origin=bulk, the run's bulkId and the field-level diff`() = testApplication {
+        usePostgresTestcontainer()
+        val actor = seedUser("ehist-bulk")
+        val bpId = unique("bp-ehist-bulk")
+        val entId = unique("ent-ehist-bulk")
+        try {
+            TestBlueprints.service.create(
+                BlueprintRequest(
+                    identifier = bpId, title = "T",
+                    schema = BlueprintSchema(properties = mapOf("size" to PropertyDefinition(type = "string"))),
+                ),
+                actor,
+            )
+            val created = service.create(request(bpId, entId), actor)
+            val bulkRequest = request(bpId, entId).copy(properties = buildJsonObject { put("size", "L") })
+            val result = service.update(
+                created.id, bulkRequest, actor, ch.nokillswit.infra.fetch.SourceWrite.Keep, created.updatedAt,
+                ch.nokillswit.entities.EntityWriteKind.BULK, "run-42",
+            )
+            assertEquals(1, result.affected)
+            val (_, updated) = TestEntityEvents.of(created.id)
+            assertEquals(EntityEventType.UPDATED, updated.type)
+            assertEquals("bulk", updated.params["origin"])
+            assertEquals("run-42", updated.params["bulkId"])
+            assertEquals(listOf("properties.size"), updated.changed())
+            assertEquals("L", updated.params["properties.size.to"])
+            assertEquals(actor, updated.userId)
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
     fun `EXISTS, INVALID and STALE import rows mint no event`() = testApplication {
         usePostgresTestcontainer()
         val importer = seedUser("ehist-refused")

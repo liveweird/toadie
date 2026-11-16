@@ -48,3 +48,21 @@ internal fun auditEntityDeleted(callerId: UInt, entityId: UInt, result: EntityDe
         *extra,
     )
 }
+
+/**
+ * `entity.updated`, `bulk: true` — one per row the entity bulk change committed (`entities/EntityBulkService.kt`), emitted from the
+ * per-row `onCommitted` callback. Carries the run's `bulkId` and the `field` path, NEVER the value (the audit rule: no document
+ * contents). The dry-run (`/check`) and the rows that were not written audit nothing.
+ */
+internal fun auditBulkChangedEntity(callerId: UInt, commit: EntityBulkCommit) {
+    audit(
+        "entity.updated",
+        "byUserId" to callerId.toLong(),
+        "entityId" to commit.id.toLong(),
+        "blueprint" to commit.blueprint,
+        "identifier" to commit.identifier,
+        "bulk" to true,
+        "bulkId" to commit.bulkId,
+        "field" to commit.field,
+    )
+}

@@ -1054,13 +1054,17 @@ including V42, are pinned in `MigrationChecksumTest`.
   write only when something changed — a no-op PUT records nothing although `updated_at` moves), the rename cascade's rewrite of each
   referrer (one UPDATED with `origin=cascade` per rewritten row, attributed to the renaming actor) and the soft delete (DELETED). The
   acting user is REQUIRED on every entry point (`update`, `delete`, `syncFromSource`, `create`); the write kind (`EntityWriteKind`) only
-  chooses the `origin`. The lock order, the V28 protocol and the one-transaction-per-write rule are unchanged; a failed event insert
+  chooses the `origin` (`import`, `import-deferred`, `cascade`, and — 2.38.0 — `bulk`: one row of the bulk change of a single field across
+  one blueprint's entities, `entities/EntityBulk*.kt`, which writes ONLY through `EntityService.update` with `SourceWrite.Keep`, the
+  stamp it read as `expectedUpdatedAt` and the run's server-minted `bulkId`, which rides that event as a param and nowhere else — there
+  is no bulk-log table; a bulk row the history would record nothing for is never written at all, a PUT moving `updated_at` regardless). The lock order, the V28 protocol and the one-transaction-per-write rule are unchanged; a failed event insert
   rolls the whole write back (and, in an import, makes that row an ERROR while its neighbours keep their rows and events).
 - **Reference:** `entities/EntityService.kt` (`create`, `applyUpdate`, `cascadeRename`, `delete`), `entities/EntitySync.kt`
   (`replaceRow`), `entities/EntityEvents.kt`, `catalog/CatalogFileService.kt` (the same rule for catalog files).
 - **Enforcement:** `EntityWriteSitesTest` (a source grep pinning the four write sites — a fifth writer fails it) and
   `EntityAtomicHistoryTest` (forced event-insert failures roll back create, update, sync, delete, a cascade and an import row);
-  `EntityHistoryTest` and `EntityEventsTest` pin what each write kind records.
+  `EntityHistoryTest` and `EntityEventsTest` pin what each write kind records (the bulk origin and `bulkId` included), and
+  `EntityAtomicHistoryTest` pins that a failed bulk-row event makes that row an ERROR while its neighbours keep their rows and events.
 - **Exception:** none; `TestEntities.remove` deletes through `EntityService.delete`, acting as the row's creator.
 
 ### Entity source references (V37)

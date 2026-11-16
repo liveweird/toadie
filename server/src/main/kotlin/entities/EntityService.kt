@@ -605,10 +605,11 @@ class EntityService(
         source: SourceWrite = SourceWrite.FromRequest,
         expectedUpdatedAt: Long? = null,
         kind: EntityWriteKind = EntityWriteKind.EDIT,
+        bulkId: String? = null,
     ): EntityUpdateResult = writeTransaction {
         val row = Entities.selectAll().where { (Entities.id eq id) and active() }.singleOrNull()
             ?: return@writeTransaction EntityUpdateResult(0, emptyList(), null)
-        applyUpdate(id, row, request, actingUserId, source, expectedUpdatedAt, kind)
+        applyUpdate(id, row, request, actingUserId, source, expectedUpdatedAt, kind, bulkId)
     }
 
     /**
@@ -619,7 +620,8 @@ class EntityService(
      * the import's optional write-version expectation: compared against the row as read under the lock,
      * BEFORE any validation or mutation (the "cheap row checks first" posture of `entities/EntitySync.kt`),
      * and refused with [EntityStaleException]. Null = unguarded. [actingUserId] and [kind] decide the
-     * history event the write mints in this same transaction (`entities/EntityEvents.kt` [replaceEvent]).
+     * history event the write mints in this same transaction (`entities/EntityEvents.kt` [replaceEvent]); [bulkId]
+     * rides that event when the write is one row of a bulk change.
      */
     internal suspend fun applyUpdate(
         id: UInt,
@@ -629,6 +631,7 @@ class EntityService(
         source: SourceWrite,
         expectedUpdatedAt: Long? = null,
         kind: EntityWriteKind = EntityWriteKind.EDIT,
+        bulkId: String? = null,
     ): EntityUpdateResult {
         if (expectedUpdatedAt != null && row[Entities.updatedAt] != expectedUpdatedAt) {
             throw EntityStaleException(STALE_CHANGED)
@@ -694,7 +697,7 @@ class EntityService(
             emptyList()
         }
         val changes = entityChanges(row.toEventState(), finalRequest.toEventState(resolved.sourceUrl), currentBlueprint.definition)
-        replaceEvent(kind, source is SourceWrite.Synced, changes, cascaded.size)
+        replaceEvent(kind, source is SourceWrite.Synced, changes, cascaded.size, bulkId)
             ?.let { eventService.recordInTransaction(id, actingUserId, it) }
         return EntityUpdateResult(1, cascaded, if (renamed) currentIdentifier else null, updatedAt = now)
     }

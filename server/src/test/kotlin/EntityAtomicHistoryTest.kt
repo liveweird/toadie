@@ -2,11 +2,17 @@ package ch.nokillswit
 
 import ch.nokillswit.blueprints.BlueprintRequest
 import ch.nokillswit.blueprints.BlueprintSchema
+import ch.nokillswit.blueprints.PropertyDefinition
 import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.entities.EntityBulkChangeRequest
+import ch.nokillswit.entities.EntityBulkOperation
+import ch.nokillswit.entities.EntityBulkStatus
+import ch.nokillswit.entities.EntityBulkTarget
 import ch.nokillswit.entities.EntityEventType
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityService
+import ch.nokillswit.entities.bulkChange
 import ch.nokillswit.entities.import
 import ch.nokillswit.entities.syncFromSource
 import ch.nokillswit.infra.importing.OntologyImportStatus
@@ -21,6 +27,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -269,6 +276,48 @@ class EntityAtomicHistoryTest {
                 assertEquals("import", events.single().params["origin"])
             }
             assertEquals(2, eventCountForActor(importer))
+        } finally {
+            TestEntities.remove(good1, failing, good2)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `a failed bulk-change event makes that row an ERROR while its neighbours keep their rows and events`() = testApplication {
+        usePostgresTestcontainer()
+        val actor = seedUser("eatomic-bulk")
+        val bpId = unique("bp-eatomic-bulk")
+        val good1 = unique("ent-eatomic-bulk1")
+        val failing = unique("ent-eatomic-bulkx")
+        val good2 = unique("ent-eatomic-bulk2")
+        try {
+            TestBlueprints.service.create(
+                BlueprintRequest(
+                    identifier = bpId, title = "T",
+                    schema = BlueprintSchema(properties = mapOf("size" to PropertyDefinition(type = "string"))),
+                ),
+                actor,
+            )
+            val created = listOf(good1, failing, good2).map { service.create(request(bpId, it), actor) }
+            val failingRow = rowJson(created[1].id)
+            val eventsBefore = created.associate { it.id to eventCount(it.id) }
+            val bulk = EntityBulkChangeRequest(
+                bpId, "properties.size", EntityBulkOperation.SET, JsonPrimitive("XL"), created.map { EntityBulkTarget(it.id) },
+            )
+            val response = withFailingEventInsert(forActorOn(actor, created[1].id)) { service.bulkChange(bulk, actor) { } }
+            assertEquals(
+                listOf(EntityBulkStatus.UPDATED, EntityBulkStatus.ERROR, EntityBulkStatus.UPDATED),
+                response.results.map { it.status },
+            )
+            assertEquals(failingRow, rowJson(created[1].id), "the failed row rolled back with its event")
+            assertEquals(eventsBefore.getValue(created[1].id), eventCount(created[1].id))
+            for (neighbour in listOf(created[0], created[2])) {
+                assertEquals("XL", (assertNotNull(service.read(neighbour.id)).properties["size"] as JsonPrimitive).content)
+                val events = TestEntityEvents.of(neighbour.id)
+                assertEquals(listOf(EntityEventType.CREATED, EntityEventType.UPDATED), events.map { it.type })
+                assertEquals("bulk", events.last().params["origin"])
+                assertEquals(response.bulkId, events.last().params["bulkId"])
+            }
         } finally {
             TestEntities.remove(good1, failing, good2)
             TestBlueprints.remove(bpId)

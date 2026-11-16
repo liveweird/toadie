@@ -795,6 +795,42 @@ every active entity's `(blueprintId, identifier) → id`, one committed transact
 the ONLY reads either planner needs; see `.claude/docs/persistence.md` "Ontology import" for why
 every actual write still goes through the ordinary V27/V28 lock per row regardless.
 
+## Bulk change (2.38.0)
+
+`POST /api/v1/entities/bulk-change` (+ `/check`, the dry-run) changes ONE field of up to 200 entities of ONE blueprint in a single
+request — any authenticated user, no admin gate (`.claude/docs/authorization.md`). Files: `entities/EntityBulk.kt` (wire types, the
+request-level rules, the operation semantics), `entities/EntityBulkPlan.kt` (the PURE per-row planner, the `classifyOne` of the import)
+and `entities/EntityBulkService.kt` (the `EntityService.bulkChange`/`bulkChangeCheck` extensions: the read ledger and the writes).
+
+- **Request:** `{blueprint, field, operation, value?, entities: [{id, updatedAt?}]}`. `field` is `properties.<id>` (a DECLARED,
+  non-computed property), `relations.<id>` (a declared relation) or `team` (not on an Inherited-ownership blueprint); `identifier`,
+  `title`, `icon`, `sourceUrl` and computed properties are never changeable. A field must be declared NOW — clearing a key the
+  blueprint no longer declares is not offered. `operation`: `SET` (needs `value`), `CLEAR` (no `value`), `ADD`/`REMOVE` (list fields
+  only — an `array` property, a `many` relation, `team` — with a non-empty array `value`). `ADD` is set-like and order-preserving
+  and leaves a field with nothing to add untouched; a `REMOVE` that empties a list, and `CLEAR`, drop the key (`team`: the column
+  becomes absent); a bare-string `team` counts as the one-item list it is. Request-level `400`s (after `caller()`/`receive`, so `401`
+  wins): no or more than 200 targets, a repeated id, a negative `updatedAt`, an unknown blueprint, an undeclared / computed /
+  Inherited-`team` field, an operation not fitting the field or its `value`, a `value` over `MAX_ENTITY_DOCUMENT_BYTES`.
+- **One classification, per row, in this order** (`planEntityBulkChange`, shared by both endpoints; the first that applies decides):
+  1 no longer an active entity -> `STALE`; 2 an entity of another blueprint -> `INVALID`; 3 the client's `updatedAt` differs from
+  the stamp read with the document -> `STALE`; 4 the operation changes nothing `entityChanges` (the history diff) would record ->
+  `UNCHANGED`, **no write** (a PUT always moves `updated_at`, so an unchanged row is never PUT); 5 `validateEntityRequest` on the
+  after-document fails -> `INVALID`; 6 `entityFindings` over the WHOLE after-document -> `INVALID` with `findings` (a bulk write is an
+  ordinary strict write, so an entity already stale for an unrelated reason is refused unless the change fixes it); 7 the running
+  workspace byte budget (the import planner's running-delta idiom) -> `INVALID`; 8 otherwise `UPDATED`. Results are in request order;
+  `before`/`after` show the field (each capped at 2,000 encoded characters, beyond that both are withheld and `valuesOmitted` is `true`).
+- **The real run** reads the targets' STORED documents (`readStoredEntities`, never the computed view) under one read-ledger
+  reservation, then writes each `UPDATED` row sequentially through `EntityService.update(…, SourceWrite.Keep, expectedUpdatedAt =
+  the stamp read with the document, EntityWriteKind.BULK, bulkId)` — its own transaction under the V28 lock, so an edit landing
+  between the classification and the write is `STALE` (checked atomically; nothing stored), a refused write `INVALID`, a failed
+  history insert or any other failure `ERROR`; one row never fails its siblings and nothing is rolled back across rows. A source-bound
+  entity keeps its source reference and sync baseline and therefore reads as locally changed afterwards.
+- **Trail:** the server mints a `bulkId` (UUID) per real run. It rides each written row's history event (`origin: bulk`, `bulkId`;
+  `persistence.md` "Entity mutations and product history") and its `entity.updated` audit line (`bulk: true`, `bulkId`, `field` —
+  never the value; `observability.md`). There is no bulk-log table, no undo and no MCP tool.
+- **Tests:** `EntityBulkPlanTest` (pure: the request rules, each operation, one case per classification step), `EntityBulkChangeTest`
+  (HTTP + the real service), plus the bulk cases in `EntityEventsTest`, `EntityHistoryTest` and `EntityAtomicHistoryTest`.
+
 ## Upstream pages snapshotted (2026-09-08)
 
 - <https://docs.port.io/context-lake/data-model/configure-data-model/>

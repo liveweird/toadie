@@ -319,7 +319,13 @@ ch.nokillswit
 │                       than deferred) plus its effectful `EntityService.import`/`importCheck`
 │                       callers and the `importSnapshot()` read seam, reusing `create`/`update`
 │                       per row under the same two-table V28 lock; since 2.9.0 a batch `sourceUrl`
-│                       stamps every stored row synced, EntityErrors.kt (Phase 8,
+│                       stamps every stored row synced, EntityBulk.kt + EntityBulkPlan.kt +
+│                       EntityBulkService.kt (2.38.0 — `POST …/entities/bulk-change` + `/check`,
+│                       any authenticated: the wire types and request rules, the PURE per-row
+│                       planner shared by the dry-run and the real run, and the `EntityService`
+│                       extension functions that read the targets' stored documents under one
+│                       ledger reservation and write each row through `update` with
+│                       `EntityWriteKind.BULK`; `port-data-model.md` "Bulk change"), EntityErrors.kt (Phase 8,
 │                       v2.5.0 — the Port twin of `catalog/Errors.kt`: pure checkers + DTOs behind
 │                       GET …/entities/errors, reporting all five classes — stale entities,
 │                       unresolved ownership, broken saved queries, computed-property health, source-less

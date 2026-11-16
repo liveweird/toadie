@@ -89,9 +89,10 @@ internal inline fun <reified T> decodeDocument(obj: JsonObject): T? = try {
 /** Best-effort identifier/blueprint for a row that failed to decode — a raw string member, else null. */
 fun rawString(obj: JsonObject, key: String): String? = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
-fun requireBatchSize(size: Int) {
+/** The batch-size cap, shared by the imports and the entity bulk change (which names its list [field] `entities`). */
+fun requireBatchSize(size: Int, field: String = "documents") {
     if (size > MAX_IMPORT_DOCUMENTS) {
-        throw BadRequestException("documents must have at most $MAX_IMPORT_DOCUMENTS entries")
+        throw BadRequestException("$field must have at most $MAX_IMPORT_DOCUMENTS entries")
     }
 }
 
