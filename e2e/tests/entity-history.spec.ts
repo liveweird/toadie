@@ -58,7 +58,7 @@ test("an entity's history records its creation and each later edit, field by fie
 
     // 1. A fresh entity's history holds exactly the creation.
     await page.goto(`/entities/${entityId}/edit`);
-    const historyHeading = page.getByRole("heading", { name: "History" });
+    const historyHeading = page.getByRole("heading", { name: "History", exact: true });
     await expect(historyHeading).toBeVisible();
     // The History section is the heading's innermost enclosing block (document order puts the
     // innermost match last), so the assertions below cannot be satisfied by the form or any
