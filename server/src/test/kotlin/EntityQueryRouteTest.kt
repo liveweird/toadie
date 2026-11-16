@@ -762,7 +762,7 @@ class EntityQueryRouteTest {
             // by the V28 lock, at most one raw candidate set at a time — pass a null reservation.
             val tuned = TestEntities.tunedService(readLedger = ReadLedger(capacity = 1))
             val created = tuned.create(entityRequest(bp, id), userId)
-            assertEquals(1, tuned.update(created.id, entityRequest(bp, id).copy(title = "renamed")).affected)
+            assertEquals(1, tuned.update(created.id, entityRequest(bp, id).copy(title = "renamed"), userId).affected)
             assertFailsWith<BadRequestException> { tuned.list(EntityFilter(blueprint = bp, q = null), PageRequest(1, 20, emptyList())) }
         } finally {
             TestEntities.remove(id)

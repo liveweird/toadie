@@ -125,7 +125,7 @@ private fun Server.addDeleteEntity(context: McpToolContext) {
             val identifier = request.requireString("identifier")
             val callerId = context.principal.writerId()
             val id = context.services.entities.findByIdentity(blueprint, identifier).orNotFound("Entity")
-            val result = context.services.entities.delete(id)
+            val result = context.services.entities.delete(id, callerId)
             result.affected.orNotFound("Entity")
             auditEntityDeleted(callerId, id, result, "clientId" to context.principal.clientId.toLong())
             toolResult(

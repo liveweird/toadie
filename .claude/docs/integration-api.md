@@ -295,11 +295,14 @@ a `read` key calling a `write`-scoped tool gets `FORBIDDEN` from `guarded`, neve
 | `get_ontology_revision` | read | readOnly | — | `{revision}` |
 | `upsert_entity` | write | idempotent | `document, sourceUrl?` | `{id, blueprint, identifier, status: CREATED\|UPDATED, findings?}` — a one-row `EntityService.import(replaceExisting = true)`: the planner's classification, the same findings, and with `sourceUrl` the import's synced stamping (an existing row's reference is KEPT when omitted, the D3 rule); any other row status is a tool error carrying that status |
 | `import_entities` | write | idempotent | `documents (1..200), replaceExisting?, sourceUrl?` | `{results, summary}` — report-and-skip, never an error as a whole |
-| `delete_entity` | write | destructive | `blueprint, identifier` | `{id, blueprint, identifier, deleted: true}`, `NOT_FOUND`, or `CONFLICT` naming `referrers` (the V28 referrer rule, never bypassed) |
+| `delete_entity` | write | destructive | `blueprint, identifier` | `{id, blueprint, identifier, deleted: true}`, `NOT_FOUND`, or `CONFLICT` naming `referrers` (the V28 referrer rule, never bypassed); mints a DELETED history event attributed to the service account |
 
 Every write is attributed to the client's service account (`created_by = serviceUserId`, audit
 `byUserId` likewise, plus `clientId`) and runs through the ordinary `EntityService` entry points —
-the V28 lock protocol, `entityFindings`, and the V39 revision bump are the REST surface's.
+the V28 lock protocol, `entityFindings`, and the V39 revision bump are the REST surface's. Since 2.37.0
+every MCP write also mints an entity history event (V51, `persistence.md` "Entity mutations and
+product history") in the same transaction, attributed to the service account (the event's actor is
+flagged as an integration client) and, for `upsert_entity`/`import_entities`, marked `origin=import`.
 Failures inside a tool are TOOL RESULTS (`isError: true`, `structuredContent = {code, message,
 …}`), never JSON-RPC protocol errors, so the model can self-correct: `INVALID` (+ `findings`),
 `NOT_FOUND`, `CONFLICT` (+ `target`, `referrers`), `BAD_REQUEST` (a read whose OWN row set exceeds

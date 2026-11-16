@@ -328,7 +328,7 @@ class EntityTest {
             )
 
             val thrown = assertFailsWith<ch.nokillswit.entities.EntityReferencedException> {
-                TestEntities.service.delete(target.id)
+                TestEntities.service.delete(target.id, owner)
             }
             assertEquals("$targetBp/$targetEnt", thrown.target)
             assertTrue(thrown.referrers.contains("$referrerBp/$referrerEnt"))
@@ -355,7 +355,7 @@ class EntityTest {
                 TestBlueprints.service.create(simpleBlueprint(otherBpId), owner)
                 val created = TestEntities.service.create(entityRequest(bpId, entId), owner)
                 val deleted = TestEntities.service.create(entityRequest(bpId, deletedEntId), owner)
-                TestEntities.service.delete(deleted.id)
+                TestEntities.service.delete(deleted.id, owner)
 
                 assertEquals(created.id, TestEntities.service.findByIdentity(bpId.uppercase(), entId.uppercase()))
                 assertEquals(null, TestEntities.service.findByIdentity(bpId, deletedEntId))
@@ -1309,14 +1309,14 @@ class EntityTest {
                 assertTrue(exception.message!!.contains("workspace is full"), exception.message!!)
 
                 // Shrinking the first entity's document frees enough room for the second to fit.
-                service.update(first.id, noteEntity(bpId, firstIdentifier, "small"))
+                service.update(first.id, noteEntity(bpId, firstIdentifier, "small"), userId)
                 val second = service.create(noteEntity(bpId, secondIdentifier, bigNote), userId)
                 createdIdentifiers += secondIdentifier
 
                 // A third same-size create is refused again until the second is deleted, which frees its room.
                 val thirdIdentifier = unique("ent-budget-3")
                 assertFailsWith<BadRequestException> { service.create(noteEntity(bpId, thirdIdentifier, bigNote), userId) }
-                service.delete(second.id)
+                service.delete(second.id, userId)
                 createdIdentifiers -= secondIdentifier
                 service.create(noteEntity(bpId, thirdIdentifier, bigNote), userId)
                 createdIdentifiers += thirdIdentifier

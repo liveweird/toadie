@@ -25,6 +25,8 @@ import ch.nokillswit.conversion.ConversionMappingService
 import ch.nokillswit.conversion.ConversionMappingServiceKey
 import ch.nokillswit.dictionaries.DictionaryService
 import ch.nokillswit.dictionaries.DictionaryServiceKey
+import ch.nokillswit.entities.EntityEventService
+import ch.nokillswit.entities.EntityEventServiceKey
 import ch.nokillswit.entities.EntityService
 import ch.nokillswit.entities.EntityServiceKey
 import ch.nokillswit.entities.JqEvaluator
@@ -321,13 +323,17 @@ suspend fun Application.configureDatabase() {
                 "entityQuery.deadlineMillis must be between 1 and $MAX_ENTITY_QUERY_DEADLINE_MILLIS"
             }
         }
+    // ONE shared event service: every entity write mints its history event through it, and the events route reads it.
+    val entityEventService = EntityEventService(database)
     val entityService = EntityService(
         database,
         JqEvaluator(deadlineMillis = jqDeadlineMillis),
         queryDeadlineMillis = entityQueryDeadlineMillis,
         readLedger = readLedger,
+        eventService = entityEventService,
     )
     attributes.put(EntityServiceKey, entityService)
+    attributes.put(EntityEventServiceKey, entityEventService)
     attributes.put(
         ConversionExportServiceKey,
         ConversionExportService(conversionMappingService, entityService, catalogFileService, readLedger),

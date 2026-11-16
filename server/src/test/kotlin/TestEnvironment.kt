@@ -1097,11 +1097,13 @@ object TestEntities {
         readLedger = readLedger,
     )
 
-    data class RawRow(val id: UInt, val identifier: String, val blueprintId: UInt, val markedAsDeleted: Boolean)
+    data class RawRow(val id: UInt, val identifier: String, val blueprintId: UInt, val markedAsDeleted: Boolean, val createdBy: UInt)
 
     suspend fun rawRows(): List<RawRow> = suspendTransaction(sharedTestDatabase) {
         val t = ch.nokillswit.entities.EntityService.Entities
-        t.selectAll().map { RawRow(it[t.id].value, it[t.identifier], it[t.blueprintId].value, it[t.markedAsDeleted]) }.toList()
+        t.selectAll()
+            .map { RawRow(it[t.id].value, it[t.identifier], it[t.blueprintId].value, it[t.markedAsDeleted], it[t.createdBy].value) }
+            .toList()
     }
 
     /**
@@ -1121,7 +1123,8 @@ object TestEntities {
             var progressed = false
             for (row in toDelete) {
                 try {
-                    service.delete(row.id)
+                    // The row's creator acts as the deleter: a fixture cleanup needs SOME existing account for the history event.
+                    service.delete(row.id, row.createdBy)
                     progressed = true
                 } catch (_: ch.nokillswit.authz.ConflictException) {
                     survivors += row.identifier
@@ -1130,6 +1133,29 @@ object TestEntities {
             if (!progressed) return
             remaining = survivors
         }
+    }
+}
+
+/**
+ * Reads an entity's history (V51) through the production [ch.nokillswit.entities.EntityEventService] over the shared
+ * test database — the events route is a later change, so the minting tests read the log the way the route will.
+ */
+object TestEntityEvents {
+    val service: ch.nokillswit.entities.EntityEventService by lazy { ch.nokillswit.entities.EntityEventService(sharedTestDatabase) }
+
+    /** Every event of [entityId], OLDEST first (the order they were minted in). */
+    suspend fun of(entityId: UInt): List<ch.nokillswit.entities.EntityEventResponse> {
+        val newestFirst = service.listForEntity(
+            entityId,
+            ch.nokillswit.infra.paging.PageRequest(1, 200, ch.nokillswit.infra.db.EVENT_LOG_DEFAULT_SORT),
+        )
+        return newestFirst.items.reversed()
+    }
+
+    /** Raw event count for [entityId], read by SQL of the test's own. */
+    suspend fun count(entityId: UInt): Long = suspendTransaction(sharedTestDatabase) {
+        val t = ch.nokillswit.entities.EntityEventService.EntityEvents
+        t.selectAll().where { t.ownerId eq entityId }.count()
     }
 }
 

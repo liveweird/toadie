@@ -37,6 +37,7 @@ private typealias EntityRows = EntityService.Entities
 internal suspend fun EntityService.syncFromSource(
     id: UInt,
     request: EntityRequest,
+    actingUserId: UInt,
     expectedSourceUrl: String? = null,
 ): EntityUpdateResult = writeTransaction {
     val row = EntityRows.selectAll().where { (EntityRows.id eq id) and active() }.singleOrNull()
@@ -45,7 +46,7 @@ internal suspend fun EntityService.syncFromSource(
     requireExpectedSourceUrl(expectedSourceUrl, currentSourceUrl)
     val sourceUrl = currentSourceUrl
         ?: throw BadRequestException("This entity has no source reference — set one before syncing")
-    applyUpdate(id, row, request, SourceWrite.Synced(sourceUrl))
+    applyUpdate(id, row, request, actingUserId, SourceWrite.Synced(sourceUrl), kind = EntityWriteKind.SYNC)
 }
 
 /** The sync state of one active entity (null = no such entity — the route's 404). Plain read, not audited. */
@@ -68,14 +69,21 @@ internal suspend fun EntityService.syncState(id: UInt): EntitySyncStateResponse?
  * ordinary update's `updatedAt` and a sync's `lastSyncedAt` stamp identically (D2,
  * `.claude/docs/persistence.md` "V37"). [row] is the row already loaded by the caller — its
  * CURRENT source columns decide the [SourceWrite.FromRequest] reset rule. [request] carries the
- * FINAL values to persist, i.e. after any rename rewriting.
+ * FINAL values to persist, i.e. after any rename rewriting. Returns the source columns the row now
+ * holds (the history diff's `sourceUrl` side), or null when no active row matched.
  */
-internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request: EntityRequest, source: SourceWrite, now: Long): Int {
+internal suspend fun EntityService.replaceRow(
+    id: UInt,
+    row: ResultRow,
+    request: EntityRequest,
+    source: SourceWrite,
+    now: Long,
+): SourceColumns? {
     val current = SourceColumns(row[EntityRows.sourceUrl], row[EntityRows.lastSyncedAt], row[EntityRows.syncedContent])
     val resolved = resolveSourceColumns(source, request.sourceUrl, current, now) {
         baselineJson(request, EntityDocument(request.properties, request.relations))
     }
-    return EntityRows.update({ (EntityRows.id eq id) and active() }) {
+    val affected = EntityRows.update({ (EntityRows.id eq id) and active() }) {
         it[identifier] = request.identifier
         it[title] = request.title
         it[icon] = request.icon
@@ -86,6 +94,7 @@ internal suspend fun EntityService.replaceRow(id: UInt, row: ResultRow, request:
         it[EntityRows.lastSyncedAt] = resolved.lastSyncedAt
         it[EntityRows.syncedContent] = resolved.syncedContent
     }
+    return if (affected == 0) null else resolved
 }
 
 /**

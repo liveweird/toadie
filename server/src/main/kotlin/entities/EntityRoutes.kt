@@ -174,7 +174,7 @@ fun Application.configureEntityRoutes() {
                 // BlueprintRoutes/LensRoutes PUT precedent), then validates inside the same
                 // locked transaction.
                 val request = sanitizedEntityRequest(call.receive())
-                val result = entityService.update(route.id, request)
+                val result = entityService.update(route.id, request, caller.userId)
                 result.affected.orNotFound("Entity")
                 val fields = buildList<Pair<String, Any?>> {
                     add("byUserId" to caller.userId.toLong())
@@ -208,7 +208,7 @@ fun Application.configureEntityRoutes() {
                 val request = call.receive<SyncEntityRequest>()
                 requireNoDocumentSourceUrl(request.document.sourceUrl)
                 val document = sanitizedEntityRequest(request.document)
-                val result = entityService.syncFromSource(route.parent.id, document, request.expectedSourceUrl)
+                val result = entityService.syncFromSource(route.parent.id, document, caller.userId, request.expectedSourceUrl)
                 result.affected.orNotFound("Entity")
                 val fields = buildList<Pair<String, Any?>> {
                     add("byUserId" to caller.userId.toLong())
@@ -225,7 +225,7 @@ fun Application.configureEntityRoutes() {
             }
             delete<EntitiesRoute.Id> { route ->
                 val caller = call.caller()
-                val result = entityService.delete(route.id)
+                val result = entityService.delete(route.id, caller.userId)
                 result.affected.orNotFound("Entity")
                 auditEntityDeleted(caller.userId, route.id, result)
                 call.respond(HttpStatusCode.NoContent)

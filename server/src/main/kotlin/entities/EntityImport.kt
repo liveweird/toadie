@@ -602,7 +602,7 @@ suspend fun EntityService.import(
         if (verdict.deferred.isEmpty()) continue
         val id = storedIds[idx] ?: continue
         val previous = rows[idx] ?: error("entity import row $idx missing after pass 1")
-        rows[idx] = pass2Entity(id, verdict, previous, source, stamps[idx])
+        rows[idx] = pass2Entity(id, verdict, previous, callerId, source, stamps[idx])
     }
     return rows.map { it ?: error("entity import row left unset") }
 }
@@ -625,7 +625,7 @@ private suspend fun EntityService.writeEntityRow(
     val expected = verdict.expectedUpdatedAt
     return try {
         if (verdict.existingId == null) {
-            val created = create(verdict.pass1, callerId, source)
+            val created = create(verdict.pass1, callerId, source, EntityWriteKind.IMPORT)
             storedIds[index] = created.id
             stamps[index] = created.updatedAt
             EntityPass1Write(
@@ -633,7 +633,7 @@ private suspend fun EntityService.writeEntityRow(
                 ImportMutation(ImportMutationKind.CREATED, created.id, identifier, blueprint = blueprint),
             )
         } else {
-            replaceRow(index, verdict, verdict.existingId, source, storedIds, stamps)
+            replaceImportedRow(index, verdict, verdict.existingId, callerId, source, storedIds, stamps)
         }
     } catch (e: CancellationException) {
         throw e
@@ -656,17 +656,18 @@ private suspend fun EntityService.writeEntityRow(
 }
 
 /** Pass one's replace of an existing entity, guarded by the row's expectation when it has one (a positive `updatedAt`). */
-private suspend fun EntityService.replaceRow(
+private suspend fun EntityService.replaceImportedRow(
     index: Int,
     verdict: EntityPlanVerdict.Store,
     existingId: UInt,
+    callerId: UInt,
     source: SourceWrite,
     storedIds: MutableMap<Int, UInt>,
     stamps: MutableMap<Int, Long>,
 ): EntityPass1Write {
     val blueprint = verdict.request.blueprint
     val identifier = verdict.request.identifier
-    val result = update(existingId, verdict.pass1, source, expectedUpdatedAt = verdict.expectedUpdatedAt)
+    val result = update(existingId, verdict.pass1, callerId, source, verdict.expectedUpdatedAt, EntityWriteKind.IMPORT)
     if (result.affected == 0) {
         // Vanished between the snapshot and the lock: with an expectation that is the stale-counterpart case.
         val row = if (verdict.expectedUpdatedAt != null) {
@@ -691,11 +692,12 @@ private suspend fun EntityService.pass2Entity(
     id: UInt,
     verdict: EntityPlanVerdict.Store,
     previousRow: EntityImportRow,
+    callerId: UInt,
     source: SourceWrite,
     pass1Stamp: Long?,
 ): EntityImportRow =
     try {
-        val result = update(id, verdict.request, source, expectedUpdatedAt = pass1Stamp)
+        val result = update(id, verdict.request, callerId, source, pass1Stamp, EntityWriteKind.IMPORT_DEFERRED)
         if (result.affected == 0) {
             previousRow.copy(
                 status = OntologyImportStatus.ERROR,

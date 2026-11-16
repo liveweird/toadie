@@ -18,17 +18,17 @@ import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 
 /**
- * The shared shape of the per-record audit-event tables (today only `catalog_file_events`,
- * V23) — ported from Lettuce, where seven `*_events` tables ride it: an FK to the owning
- * record, the acting user, a creation timestamp, and a STRUCTURED event (kind + JSON params)
- * the SPA localizes. Feature packages declare
+ * The shared shape of the per-record audit-event tables (`catalog_file_events`, V23, and
+ * `entity_events`, V51) — ported from Lettuce, where seven `*_events` tables ride it: an FK to
+ * the owning record, the acting user, a creation timestamp, and a STRUCTURED event (kind + JSON
+ * params) the SPA localizes. Feature packages declare
  * `object XEvents : EventLogTable("x_events", "x_id", XTable)` and keep their typed
  * create/list wrappers; the mechanics live once here.
  *
  * Two deliberate departures from Lettuce's copy. Its opt-in `commentColumn` hook (an
  * encrypted free-text column on `goal_events`) is left behind: Toadie's events never store
- * free text at all — the diff records the FACT that a free-text field changed, never its
- * value (`catalog/CatalogFileEvents.kt`). And [listFor] is PAGED, because a catalog file's
+ * document free text — the diff records the FACT that a free-text field changed, never its
+ * value (`catalog/CatalogFileEvents.kt`, `entities/EntityEvents.kt`). And [listFor] is PAGED, because a catalog file's
  * event count is unbounded (repo sync alone mints one per run) and
  * `api-guidelines/API-GUIDELINES.md` admits the unpaged `{items}` wrapper only for an
  * intrinsically tiny set.
@@ -64,6 +64,10 @@ data class EventLogRow(
     val ownerId: UInt,
     val userId: UInt,
     val userName: String,
+    /** The acting account has since been soft-deleted (its name is still the one recorded). */
+    val userDeleted: Boolean,
+    /** The acting account is an integration client's service account (V41) — an MCP write. */
+    val userServiceAccount: Boolean,
     val timestamp: Long,
     val type: String,
     val params: Map<String, String>,
@@ -119,6 +123,8 @@ class EventLog(private val database: R2dbcDatabase, private val table: EventLogT
                     ownerId = ownerId,
                     userId = row[table.userId].value,
                     userName = row[UserService.Users.name],
+                    userDeleted = row[UserService.Users.markedAsDeleted],
+                    userServiceAccount = row[UserService.Users.serviceAccount],
                     timestamp = row[table.timestamp],
                     type = row[table.eventType],
                     params = decodeParams(row[table.params]),

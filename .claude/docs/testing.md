@@ -352,6 +352,29 @@ replace whole, audits nothing for the row; adjacent rows still commit). Frontend
 summaries) and the two wire cases in `catalogFiles.test.ts`; e2e: the second scenario of
 `round-trip.spec.ts`.
 
+Entity history (V51) has four classes. `EntityEventsTest` is the pure diff: one case per rule of
+`entities/EntityEvents.kt` (identical states change nothing, scalar from/to, list added/removed,
+reorder = nothing, scalar-to-list reshape, per-key properties and relations, yaml/markdown/proto
+and object/array-of-object/comma/over-long values named only, the `sourceUrl` pseudo-field, 41
+fields = 40 + `more`, the shared 4,000-character value budget, param-name collisions impossible)
+and the `replaceEvent` rule per write kind. `EntityHistoryTest` mints through the real service and
+reads back via `TestEntityEvents` (a no-op PUT records nothing while `updatedAt` moves, a
+sourceUrl-only change records, an unchanged sync still records SYNCED, a rename's own event plus
+the cascade events across relations / team / format team|user, `origin=import` and pass two's
+`import-deferred`, EXISTS/INVALID/STALE rows mint nothing, document text never reaches the stored
+params — including the text of a property the blueprint has since dropped or that carries a `spec` —
+DELETED outlives the entity). `EntityAtomicHistoryTest` ports `withFailingEventInsert` to
+`entity_events` (a failed CREATED leaves no row; failed UPDATED/SYNCED/DELETED leave the entity
+row byte-equal by `row_to_json`; a failed event at the end of a rename rolls back the rename and every cascaded referrer;
+a failed import row is an ERROR while its neighbours keep rows and events, and so does a failed
+pass two; two overlapping PUTs queued behind `EntityWriteBarrier` each diff from their committed
+predecessor). `EntityWriteSitesTest` is the source grep (the `SsoConfigTest` idiom, whitespace-joined
+and alias-aware, with a self-test on synthetic sources) pinning the four write sites of the
+`entities` table and the single `replaceRow` caller, the Enforcement of `persistence.md` "Entity mutations and
+product history"; `IntegrationMcpTest` pins the MCP origin and service-account attribution, and
+`StorageCollectorsTest` the counted `entity_events` table. `TestEntities.remove` deletes as the
+row's creator, because every delete now needs an acting user.
+
 Each Port sample test explicitly provisions its required `composition`/`deployment` hierarchy
 values and snapshots the prior dictionary, including entry IDs. Cleanup removes sample entity
 and blueprint references before restoring that dictionary. Every case must pass independently
