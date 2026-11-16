@@ -304,7 +304,19 @@ class EntityAtomicHistoryTest {
             val bulk = EntityBulkChangeRequest(
                 bpId, "properties.size", EntityBulkOperation.SET, JsonPrimitive("XL"), created.map { EntityBulkTarget(it.id) },
             )
-            val response = withFailingEventInsert(forActorOn(actor, created[1].id)) { service.bulkChange(bulk, actor) { } }
+            val committed = mutableListOf<UInt>()
+            val errorLog = LogCapture("ch.nokillswit.entities.EntityBulk")
+            val response = try {
+                withFailingEventInsert(forActorOn(actor, created[1].id)) { service.bulkChange(bulk, actor) { committed += it.id } }
+            } finally {
+                errorLog.detach()
+            }
+            assertEquals(listOf(created[0].id, created[2].id), committed, "onCommitted fired for the neighbours, never for the ERROR row")
+            val warnings = errorLog.events.filter { it.level == ch.qos.logback.classic.Level.WARN }
+            assertEquals(1, warnings.size, "one WARN for the ERROR row")
+            val line = warnings.single().formattedMessage
+            assertTrue(line.contains("entityId=${created[1].id}"), line)
+            assertTrue("XL" !in line && failing !in line, "the line carries no document or value content: $line")
             assertEquals(
                 listOf(EntityBulkStatus.UPDATED, EntityBulkStatus.ERROR, EntityBulkStatus.UPDATED),
                 response.results.map { it.status },

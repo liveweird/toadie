@@ -2403,10 +2403,12 @@ export interface paths {
          *     encoded characters each; beyond that both are withheld and `valuesOmitted` is `true`.
          *
          *     The `400` covers only the request itself (an undecodable body, no entity or more than
-         *     200, a repeated id, a negative `updatedAt`, an unknown blueprint, a field that is
-         *     undeclared, computed or the team of an Inherited blueprint, an operation that does not
-         *     fit the field or its `value`, a `value` over 262144 bytes) and a stored workspace too
-         *     large for the server's read budget; `429` means other workspace reads are in flight.
+         *     200, a repeated id, a negative `updatedAt`, an unknown blueprint, a `field` outside
+         *     the grammar above or over 111 characters, a field that is undeclared, computed or the
+         *     team of an Inherited blueprint, an operation that does not fit the field or its
+         *     `value`, a `value` over 262144 bytes) and a stored workspace too large for the server's
+         *     read budget; `429` means other workspace reads are in flight. The request body is also
+         *     bounded by the server-wide request-size limit (`413`).
          */
         post: operations["bulkChangeEntities"];
         delete?: never;
@@ -4240,7 +4242,7 @@ export interface components {
         EntityBulkChangeRequest: {
             /** @description The blueprint identifier every target must belong to (an unknown one is a `400`). */
             blueprint: string;
-            /** @description The field to change, in the findings path grammar: `properties.<id>` (a declared, non-computed property), `relations.<id>` (a declared relation) or `team` (not on an Inherited-ownership blueprint). `identifier`, `title`, `icon` and `sourceUrl` are not changeable here. */
+            /** @description The field to change, in the findings path grammar: `properties.<id>` (a declared, non-computed property), `relations.<id>` (a declared relation) or `team` (not on an Inherited-ownership blueprint). `identifier`, `title`, `icon` and `sourceUrl` are not changeable here. At most 111 characters (`properties.` + a 100-character id). */
             field: string;
             /**
              * @description `SET` replaces (needs `value`), `CLEAR` removes (no `value`), `ADD`/`REMOVE` add or remove items of a list field (an `array` property, a `many` relation, `team`) and need a non-empty array `value`.
@@ -4280,7 +4282,7 @@ export interface components {
             findings?: components["schemas"]["EntityFinding"][];
             /**
              * Format: int64
-             * @description The entity's stored write-version after this row's outcome — the new stamp for `UPDATED`, the current one otherwise; absent when the entity is no longer active.
+             * @description The entity's stored write-version after this row's outcome — the new stamp for `UPDATED`, the current one otherwise (a `STALE` row carries the CURRENT stored stamp, so a retry with it is not stale again); absent when the entity is no longer active, and on a `STALE` row whose current stamp could not be read.
              */
             updatedAt?: number;
             /** @description The field's stored value before the change (any JSON); absent = it had no value, or `valuesOmitted`. */
@@ -7958,6 +7960,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };
@@ -7986,6 +7989,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };

@@ -73,7 +73,10 @@ expression. The INPUT document is never logged, on either logger. The read ledge
 ONE INFO line on `ch.nokillswit.infra.concurrency.ReadLedger` per refused whole-workspace read —
 `ownRequest`, the requested bytes, the in-flight total and the capacity, never a caller or any
 document content — is the same kind of operational signal; the `400`/`429` it accompanies audits
-nothing (`.claude/docs/security.md` "Entity read memory budget"). The response deadline's ONE WARN on
+nothing (`.claude/docs/security.md` "Entity read memory budget"). The entity bulk change's (2.38.0) ONE WARN on
+`ch.nokillswit.entities.EntityBulk` per `ERROR` row — the entity id, the run's `bulkId` and the exception CLASS name, never the document,
+the value or the exception message — is the same kind of operational signal (the row is reported `ERROR`, nothing is audited for it).
+The response deadline's ONE WARN on
 `ch.nokillswit.infra.db` per discarded connection — the kind of exchange (statement, commit, rollback, …) and
 the bound (seconds, or milliseconds for a sub-second bound), never SQL, parameters or a caller (`infra/db/ResponseDeadline.kt`, `.claude/docs/persistence.md`
 "Response deadline: every exchange below the pool") — is an operational signal too, not an audit event; the failure

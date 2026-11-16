@@ -15,12 +15,14 @@ import ch.nokillswit.entities.EntityEventType
 import ch.nokillswit.entities.EntityRequest
 import ch.nokillswit.entities.EntityResponse
 import ch.nokillswit.entities.EntityService
+import ch.nokillswit.entities.MAX_BULK_FIELD_CHARS
 import ch.nokillswit.entities.bulkChange
 import ch.nokillswit.entities.bulkChangeCheck
 import ch.nokillswit.infra.concurrency.ReadLedger
 import ch.nokillswit.users.UserRole
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -121,6 +123,17 @@ class EntityBulkChangeTest {
 
     private suspend fun HttpClient.entity(id: UInt): EntityResponse = get("/api/v1/entities/$id").body()
 
+    /** Overwrites an entity's stored document straight in the table — a state the strict API can no longer produce. */
+    private suspend fun plantDocument(id: UInt, document: String) = withContext(Dispatchers.IO) {
+        DriverManager.getConnection(PostgresTestSupport.jdbcUrl, PostgresTestSupport.user, PostgresTestSupport.password).use { c ->
+            c.prepareStatement("UPDATE entities SET document = ? WHERE id = ?").use { statement ->
+                statement.setString(1, document)
+                statement.setLong(2, id.toLong())
+                check(statement.executeUpdate() == 1) { "missing entity fixture $id" }
+            }
+        }
+    }
+
     private suspend fun seedOwner(prefix: String): UInt = TestUsers.seed(uniqueEmail(prefix), "pw", name = prefix, role = UserRole.USER)
 
     /** Runs [block] with a BEFORE UPDATE row trigger on `entities` running the plpgsql [body] per updated row; always removed again. */
@@ -212,6 +225,10 @@ class EntityBulkChangeTest {
                 "undeclared property" to world.request("properties.nope", EntityBulkOperation.SET, JsonPrimitive("x")),
                 "undeclared relation" to world.request("relations.nope", EntityBulkOperation.SET, JsonPrimitive("x")),
                 "not a changeable field" to world.request("title", EntityBulkOperation.SET, JsonPrimitive("x")),
+                "field over the length cap" to
+                    world.request("properties.${"x".repeat(MAX_BULK_FIELD_CHARS)}", EntityBulkOperation.SET, JsonPrimitive("x")),
+                "field outside the grammar" to world.request("properties.a b", EntityBulkOperation.SET, JsonPrimitive("x")),
+                "blueprint over the length cap" to set(one).copy(blueprint = "b".repeat(101)),
                 "ADD on a scalar" to world.request("properties.tier", EntityBulkOperation.ADD, list("gold")),
                 "REMOVE on a one-relation" to world.request("relations.owner", EntityBulkOperation.REMOVE, list("x")),
                 "SET without a value" to world.request("properties.tier", EntityBulkOperation.SET),
@@ -225,6 +242,11 @@ class EntityBulkChangeTest {
                 assertEquals(HttpStatusCode.BadRequest, user.check(request).status, "check: $name")
                 assertEquals(HttpStatusCode.BadRequest, user.apply(request).status, "apply: $name")
             }
+            // the refusal never echoes the offending field: a bounded fixed message only
+            val long = "properties." + "q".repeat(5_000)
+            val refused = user.apply(world.request(long, EntityBulkOperation.SET, JsonPrimitive("x")))
+            assertEquals(HttpStatusCode.BadRequest, refused.status)
+            assertTrue(!refused.bodyAsText().contains("qqqqq"), "an over-long field is never echoed into the 400")
             // a negative id on the wire never wraps into a huge unsigned one
             val negative = """{"blueprint":"${world.bp}","field":"properties.tier","operation":"CLEAR","entities":[{"id":-1}]}"""
             val raw = user.post("/api/v1/entities/bulk-change") {
@@ -251,7 +273,17 @@ class EntityBulkChangeTest {
             val otherRequest = EntityRequest(blueprint = foreign, identifier = unique("ent-bulk-x"), title = "X")
             val other = user.postJson("/api/v1/entities", otherRequest).body<EntityResponse>()
             val ghost = 9_999_999u
-            val targets = listOf(world.a, world.b, other, world.c).map { EntityBulkTarget(it.id) } + EntityBulkTarget(ghost)
+            // an entity already invalid for an unrelated reason: the whole-document findings refuse it even though `tier` is fine
+            val broken = user.postJson(
+                "/api/v1/entities",
+                EntityRequest(
+                    blueprint = world.bp, identifier = unique("ent-bulk-broken"), title = "Broken",
+                    properties = buildJsonObject { put("tier", "gold") },
+                ),
+            ).body<EntityResponse>()
+            plantDocument(broken.id, """{"properties":{"tier":"gold","tags":5},"relations":{}}""")
+            val targets = listOf(world.a, world.b, other, world.c).map { EntityBulkTarget(it.id) } +
+                EntityBulkTarget(ghost) + EntityBulkTarget(broken.id)
             val request = world.request("properties.tier", EntityBulkOperation.SET, JsonPrimitive("silver"), targets)
             val before = listOf(world.a, world.b, world.c).associate { it.id to it.updatedAt }
             val eventsBefore = listOf(world.a, world.b, world.c).associate { it.id to TestEntityEvents.count(it.id) }
@@ -261,10 +293,11 @@ class EntityBulkChangeTest {
             assertEquals(
                 listOf(
                     EntityBulkStatus.UPDATED, EntityBulkStatus.UNCHANGED, EntityBulkStatus.INVALID, EntityBulkStatus.UPDATED,
-                    EntityBulkStatus.STALE,
+                    EntityBulkStatus.STALE, EntityBulkStatus.INVALID,
                 ),
                 predicted.results.map { it.status },
             )
+            assertTrue(predicted.results.last().findings.orEmpty().isNotEmpty(), "the findings ride the INVALID row")
             assertEquals(JsonPrimitive("gold"), predicted.results[0].before)
             assertEquals(JsonPrimitive("silver"), predicted.results[0].after)
             assertEquals(targets.map { it.id }, predicted.results.map { it.id }, "request order")
@@ -277,6 +310,7 @@ class EntityBulkChangeTest {
             assertNotNull(applied.bulkId)
             assertEquals(predicted.results.map { it.status }, applied.results.map { it.status }, "parity, row by row")
             assertEquals(predicted.results.map { it.message }, applied.results.map { it.message })
+            assertEquals(predicted.results.map { it.findings }, applied.results.map { it.findings }, "findings: check = apply")
             assertEquals(listOf(world.a.id, world.c.id), applied.results.filter { it.status == EntityBulkStatus.UPDATED }.map { it.id })
             applied.results.filter { it.status == EntityBulkStatus.UPDATED }.forEach {
                 assertTrue(assertNotNull(it.updatedAt) > before.getValue(it.id), "the new stamp rides the result")
@@ -285,10 +319,34 @@ class EntityBulkChangeTest {
             assertEquals("silver", (user.entity(world.a.id).properties["tier"] as JsonPrimitive).content)
             assertEquals(before.getValue(world.b.id), user.entity(world.b.id).updatedAt, "UNCHANGED is not written")
             assertEquals(eventsBefore.getValue(world.b.id), TestEntityEvents.count(world.b.id), "UNCHANGED mints no event")
-            TestEntities.remove(other.identifier)
+            TestEntities.remove(other.identifier, broken.identifier)
         } finally {
             world.cleanup()
             TestBlueprints.remove(foreign)
+        }
+    }
+
+    @Test
+    fun `a byte-budget INVALID row is predicted identically by the check and the real run`() = testApplication {
+        usePostgresTestcontainer()
+        val user = seededClient("bulk-budget", UserRole.USER)
+        val owner = seedOwner("bulk-budget-owner")
+        val world = user.world(owner)
+        try {
+            val targets = listOf(world.a, world.c).map { EntityBulkTarget(it.id) }
+            val request = world.request("properties.tier", EntityBulkOperation.SET, JsonPrimitive("silver"), targets)
+            // gold -> silver grows each document by 2 bytes: with 3 bytes of room the first row fits and the second does not
+            val tuned = TestEntities.tunedService(workspaceDocumentBytes = service.importSnapshot().documentBytes + 3)
+            val predicted = tuned.bulkChangeCheck(request)
+            val applied = tuned.bulkChange(request, owner) { }
+            assertEquals(listOf(EntityBulkStatus.UPDATED, EntityBulkStatus.INVALID), predicted.results.map { it.status })
+            assertTrue(predicted.results.last().message.orEmpty().contains("workspace is full"))
+            assertEquals(predicted.results.map { it.status }, applied.results.map { it.status }, "parity, row by row")
+            assertEquals(predicted.results.map { it.message }, applied.results.map { it.message })
+            assertEquals(predicted.results.map { it.before to it.after }, applied.results.map { it.before to it.after })
+            assertEquals(JsonPrimitive("gold"), user.entity(world.c.id).properties["tier"], "the refused row was not written")
+        } finally {
+            world.cleanup()
         }
     }
 
@@ -390,6 +448,43 @@ class EntityBulkChangeTest {
             assertEquals(listOf(EntityBulkStatus.UPDATED, EntityBulkStatus.STALE), applied.results.map { it.status })
             assertEquals("gold", (user.entity(world.c.id).properties["tier"] as JsonPrimitive).content)
             assertEquals(1, TestEntityEvents.of(world.c.id).size, "the stale row minted no event")
+            // the write-time STALE row carries the CURRENT stored stamp (so a retry with it is not stale again) and its identity
+            val stale = applied.results.last()
+            assertEquals(user.entity(world.c.id).updatedAt, stale.updatedAt)
+            assertTrue(assertNotNull(stale.updatedAt) > world.c.updatedAt, "the stamp moved under the classification")
+            assertEquals(world.c.identifier, stale.identifier)
+            assertNull(stale.before)
+            assertNull(stale.after)
+            val retryTarget = listOf(EntityBulkTarget(world.c.id, stale.updatedAt))
+            val retry = user.applied(world.request("properties.tier", EntityBulkOperation.SET, JsonPrimitive("silver"), retryTarget))
+            assertEquals(listOf(EntityBulkStatus.UPDATED), retry.results.map { it.status }, "a retry with result.updatedAt succeeds")
+        } finally {
+            world.cleanup()
+        }
+    }
+
+    @Test
+    fun `an entity that vanishes between the classification and its write is a STALE row without identity or stamp`() = testApplication {
+        usePostgresTestcontainer()
+        val user = seededClient("bulk-gone", UserRole.USER)
+        val world = user.world(seedOwner("bulk-gone-owner"))
+        try {
+            val targets = listOf(world.a, world.c).map { EntityBulkTarget(it.id) }
+            val request = world.request("properties.tier", EntityBulkOperation.SET, JsonPrimitive("silver"), targets)
+            // writing `a` soft-deletes `c`, as a concurrent delete of `c` would between the classification and `c`'s own write
+            val applied = withUpdateTrigger(
+                "IF NEW.identifier = ${sqlLiteral(world.a.identifier)} THEN " +
+                    "UPDATE entities SET marked_as_deleted = true WHERE identifier = ${sqlLiteral(world.c.identifier)}; END IF;",
+            ) { user.apply(request).body<EntityBulkChangeResponse>() }
+            assertEquals(listOf(EntityBulkStatus.UPDATED, EntityBulkStatus.STALE), applied.results.map { it.status })
+            val gone = applied.results.last()
+            assertEquals(world.c.id, gone.id)
+            assertNull(gone.identifier)
+            assertNull(gone.title)
+            assertNull(gone.updatedAt)
+            assertNull(gone.before)
+            assertNull(gone.after)
+            assertEquals("the entity no longer exists", gone.message)
         } finally {
             world.cleanup()
         }
@@ -410,6 +505,10 @@ class EntityBulkChangeTest {
             // adding what is there is UNCHANGED
             val again = user.applied(world.request("properties.tags", EntityBulkOperation.ADD, list("y"), targets))
             assertEquals(listOf(EntityBulkStatus.UNCHANGED, EntityBulkStatus.UNCHANGED), again.results.map { it.status })
+            // a SET that only reorders a list of scalars diffs to nothing (the history's reorder rule): UNCHANGED, not stored
+            val reorder = user.applied(world.request("properties.tags", EntityBulkOperation.SET, list("y", "x"), targets))
+            assertEquals(listOf(EntityBulkStatus.UNCHANGED, EntityBulkStatus.UNCHANGED), reorder.results.map { it.status })
+            assertEquals(list("x", "y"), user.entity(world.a.id).properties["tags"])
             user.apply(world.request("properties.tags", EntityBulkOperation.REMOVE, list("x"), targets))
             assertEquals(list("y"), user.entity(world.b.id).properties["tags"])
             user.apply(world.request("properties.tags", EntityBulkOperation.REMOVE, list("y"), targets))
@@ -479,6 +578,7 @@ class EntityBulkChangeTest {
             val other = busy.open().apply { reserve(capacity - 1) }
             try {
                 assertFailsWith<TooManyRequestsException> { TestEntities.tunedService(readLedger = busy).bulkChangeCheck(request) }
+                assertFailsWith<TooManyRequestsException> { TestEntities.tunedService(readLedger = busy).bulkChange(request, 1u) { } }
             } finally {
                 other.close()
             }
@@ -489,6 +589,17 @@ class EntityBulkChangeTest {
             val ledger = ReadLedger()
             val ok = TestEntities.tunedService(readLedger = ledger).bulkChangeCheck(request)
             assertEquals(3, ok.results.size)
+            assertEquals(0L, ledger.inFlightBytes, "released once the response is built")
+
+            // the real run keeps only the written rows' after-documents while it writes, not the read documents: `b` is
+            // already silver (UNCHANGED), so two of three rows are held, below the three-row read reservation
+            val held = mutableListOf<Long>()
+            val real = TestEntities.tunedService(readLedger = ledger)
+            val applied = real.bulkChange(request, seedOwner("bulk-ledger-actor")) { held += ledger.inFlightBytes }
+            val expected = listOf(EntityBulkStatus.UPDATED, EntityBulkStatus.UNCHANGED, EntityBulkStatus.UPDATED)
+            assertEquals(expected, applied.results.map { it.status })
+            assertEquals(2, held.size)
+            assertTrue(held.all { it > 0 && it < ledger.peak }, "write-set only: held=$held peak=${ledger.peak}")
             assertEquals(0L, ledger.inFlightBytes, "released once the response is built")
         } finally {
             world.cleanup()

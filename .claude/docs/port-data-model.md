@@ -809,8 +809,14 @@ and `entities/EntityBulkService.kt` (the `EntityService.bulkChange`/`bulkChangeC
   only — an `array` property, a `many` relation, `team` — with a non-empty array `value`). `ADD` is set-like and order-preserving
   and leaves a field with nothing to add untouched; a `REMOVE` that empties a list, and `CLEAR`, drop the key (`team`: the column
   becomes absent); a bare-string `team` counts as the one-item list it is. Request-level `400`s (after `caller()`/`receive`, so `401`
-  wins): no or more than 200 targets, a repeated id, a negative `updatedAt`, an unknown blueprint, an undeclared / computed /
-  Inherited-`team` field, an operation not fitting the field or its `value`, a `value` over `MAX_ENTITY_DOCUMENT_BYTES`.
+  wins): no or more than 200 targets, a repeated id, a negative `updatedAt`, an unknown blueprint, a `blueprint` over 100 characters
+  or a `field` over 111 characters / outside the `team` | `properties.<id>` | `relations.<id>` grammar (refused BEFORE the workspace
+  identity read, with a fixed message that never echoes the offending text, so a malformed request costs nothing), an undeclared /
+  computed / Inherited-`team` field, an operation not fitting the field or its `value`, a `value` over `MAX_ENTITY_DOCUMENT_BYTES`.
+  A well-formed request naming an unknown blueprint still pays the one identity read (the same snapshot every valid request needs).
+  A `SET` whose value only REORDERS a list of scalars diffs to nothing under the history's rule (a pure reorder records nothing,
+  `persistence.md` "Entity mutations and product history"), so that row is `UNCHANGED` and is not stored — to reorder a list, change its
+  contents in the same write.
 - **One classification, per row, in this order** (`planEntityBulkChange`, shared by both endpoints; the first that applies decides):
   1 no longer an active entity -> `STALE`; 2 an entity of another blueprint -> `INVALID`; 3 the client's `updatedAt` differs from
   the stamp read with the document -> `STALE`; 4 the operation changes nothing `entityChanges` (the history diff) would record ->
@@ -820,10 +826,14 @@ and `entities/EntityBulkService.kt` (the `EntityService.bulkChange`/`bulkChangeC
   workspace byte budget (the import planner's running-delta idiom) -> `INVALID`; 8 otherwise `UPDATED`. Results are in request order;
   `before`/`after` show the field (each capped at 2,000 encoded characters, beyond that both are withheld and `valuesOmitted` is `true`).
 - **The real run** reads the targets' STORED documents (`readStoredEntities`, never the computed view) under one read-ledger
-  reservation, then writes each `UPDATED` row sequentially through `EntityService.update(…, SourceWrite.Keep, expectedUpdatedAt =
+  reservation that is released once the plan exists, re-reserves only the planned writes' after-documents for the write loop
+  (`security.md` "Whole-workspace content reads are admitted through the one read ledger"), then writes each `UPDATED` row sequentially through `EntityService.update(…, SourceWrite.Keep, expectedUpdatedAt =
   the stamp read with the document, EntityWriteKind.BULK, bulkId)` — its own transaction under the V28 lock, so an edit landing
   between the classification and the write is `STALE` (checked atomically; nothing stored), a refused write `INVALID`, a failed
-  history insert or any other failure `ERROR`; one row never fails its siblings and nothing is rolled back across rows. A source-bound
+  history insert or any other failure `ERROR` (one WARN on `ch.nokillswit.entities.EntityBulk` naming only the entity id, the run id and
+  the exception class; `onCommitted`, hence the audit line, never fires for it); a write-time `STALE` row reports the entity's
+  CURRENT stored `updatedAt` (so a retry with `result.updatedAt` is not stale again; absent only when the stamp cannot be read), or —
+  when the entity vanished in between — no `identifier`/`title`/`updatedAt` at all; one row never fails its siblings and nothing is rolled back across rows. A source-bound
   entity keeps its source reference and sync baseline and therefore reads as locally changed afterwards.
 - **Trail:** the server mints a `bulkId` (UUID) per real run. It rides each written row's history event (`origin: bulk`, `bulkId`;
   `persistence.md` "Entity mutations and product history") and its `entity.updated` audit line (`bulk: true`, `bulkId`, `field` —

@@ -1,6 +1,7 @@
 package ch.nokillswit.entities
 
 import ch.nokillswit.blueprints.BlueprintDefinition
+import ch.nokillswit.blueprints.MAX_BLUEPRINT_IDENTIFIER_LENGTH
 import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.infra.importing.requireBatchSize
 import io.ktor.server.plugins.BadRequestException
@@ -24,6 +25,12 @@ private const val BULK_FIELD_ENTITIES = "entities"
 
 /** `before`/`after` ride a result only up to this many encoded characters each; beyond it both are withheld (`valuesOmitted`). */
 internal const val MAX_BULK_VALUE_CHARS = 2_000
+
+/** The longest valid `field`: the `properties.` prefix plus a blueprint-grammar id — a longer one is refused before any database read. */
+internal const val MAX_BULK_FIELD_CHARS = "properties.".length + MAX_BLUEPRINT_IDENTIFIER_LENGTH
+
+/** The blueprint-identifier charset (`blueprints/BlueprintValidation.kt`) behind `properties.<id>` / `relations.<id>`;`team` aside. */
+private val BULK_FIELD_REGEX = Regex("(properties|relations)\\.[A-Za-z0-9@_.:/=-]+")
 
 @Serializable
 enum class EntityBulkOperation { SET, CLEAR, ADD, REMOVE }
@@ -88,10 +95,18 @@ internal data class ResolvedBulkChange(
 )
 
 /**
- * The request-SHAPE rules that need no blueprint: 1..200 targets, distinct ids, no negative stamp, the operation/value pairing
- * of SET and CLEAR and a bounded value. Run by the service for both endpoints, AFTER the route's guard and `receive` (401 wins).
+ * The request-SHAPE rules that need no database: bounded `blueprint` and grammar-valid `field` (so a bad request costs nothing and
+ * never echoes more than a fixed message), 1..200 targets, distinct ids, no negative stamp, the operation/value pairing of SET and
+ * CLEAR and a bounded value. Run by the service for both endpoints, AFTER the route's guard and `receive` (401 wins).
  */
 internal fun requireBulkShape(request: EntityBulkChangeRequest) {
+    if (request.blueprint.length !in 1..MAX_BLUEPRINT_IDENTIFIER_LENGTH) {
+        throw BadRequestException("blueprint must be 1-$MAX_BLUEPRINT_IDENTIFIER_LENGTH characters")
+    }
+    if (request.field.length > MAX_BULK_FIELD_CHARS) {
+        throw BadRequestException("field must be at most $MAX_BULK_FIELD_CHARS characters")
+    }
+    if (request.field != "team" && !BULK_FIELD_REGEX.matches(request.field)) throw BadRequestException(FIELD_FORM_MESSAGE)
     if (request.entities.isEmpty()) throw BadRequestException("$BULK_FIELD_ENTITIES must have at least 1 entry")
     requireBatchSize(request.entities.size, BULK_FIELD_ENTITIES)
     if (request.entities.map { it.id }.toSet().size != request.entities.size) {
@@ -147,8 +162,10 @@ private fun resolveBulkField(path: String, definition: BlueprintDefinition): Res
         val declared = definition.relations[id] ?: throw BadRequestException("'$id' is not a declared relation")
         ResolvedBulkField(path, BulkSection.RELATIONS, id, listLike = declared.many)
     }
-    else -> throw BadRequestException("field must be 'team', 'properties.<id>' or 'relations.<id>'")
+    else -> throw BadRequestException(FIELD_FORM_MESSAGE)
 }
+
+private const val FIELD_FORM_MESSAGE = "field must be 'team', 'properties.<id>' or 'relations.<id>'"
 
 /** The field's STORED value on [entity] (explicit null is the same absence as a missing key), null when absent. */
 internal fun StoredEntity.fieldValue(field: ResolvedBulkField): JsonElement? =

@@ -33,7 +33,7 @@ internal sealed interface BulkRowPlan {
     ) : BulkRowPlan
 }
 
-private const val NO_LONGER_ACTIVE = "the entity no longer exists"
+internal const val NO_LONGER_ACTIVE = "the entity no longer exists"
 
 /** [targets] in request order against what was [stored] (only the still-active ones are present), judged under [change]. */
 internal fun planEntityBulkChange(
