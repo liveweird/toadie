@@ -216,6 +216,37 @@ export async function checkEntityImport(
   return postEntityImportBatch("import/check", documents, replaceExisting, sourceUrl, expected);
 }
 
+// -- Bulk change (2.38.0 — .claude/docs/port-data-model.md "Bulk change") -----------------------
+// POST /api/v1/entities/bulk-change(/check): ONE operation on ONE field of up to 200 entities of
+// ONE blueprint, report-and-skip per row (any authenticated user, no admin gate). The dry-run
+// shares the row shape; the real run mints a `bulkId` that only history events and audit lines
+// carry — there is no bulk log.
+
+export type EntityBulkChangeRequest = components["schemas"]["EntityBulkChangeRequest"];
+export type EntityBulkChangeResponse = components["schemas"]["EntityBulkChangeResponse"];
+export type EntityBulkResult = components["schemas"]["EntityBulkResult"];
+export type EntityBulkStatus = components["schemas"]["EntityBulkStatus"];
+export type EntityBulkOperation = EntityBulkChangeRequest["operation"];
+
+/** The server's per-request cap on targets (`MAX_IMPORT_DOCUMENTS`). */
+export const MAX_BULK_CHANGE_ENTITIES = 200;
+
+/** The dry-run: identical request rules and per-row classification, nothing stored or audited. */
+export async function checkEntityBulkChange(body: EntityBulkChangeRequest): Promise<EntityBulkChangeResponse> {
+  return jsonRequest<EntityBulkChangeResponse>("/api/v1/entities/bulk-change/check", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** The real run: each changed entity is an ordinary strict write with its own history event. */
+export async function applyEntityBulkChange(body: EntityBulkChangeRequest): Promise<EntityBulkChangeResponse> {
+  return jsonRequest<EntityBulkChangeResponse>("/api/v1/entities/bulk-change", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 // -- Source references & HTTP re-sync (2.9.0) — the `api/catalogFiles.ts` twin, one level
 // down: `POST /api/v1/entities/fetch` (SSRF-guarded, the shared `infra/fetch/UrlFetcher`) and
 // `GET`/`POST /api/v1/entities/{id}/sync`. Unlike the catalog's repo sync, the entity sync

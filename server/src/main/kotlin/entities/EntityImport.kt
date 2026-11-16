@@ -376,7 +376,7 @@ private fun countCapMessage(c: Candidate, snapshot: EntityImportSnapshot, totalC
     else -> null
 }
 
-private fun byteBudgetMessage(projectedBytes: Long, workspaceDocumentBytes: Long): String? =
+internal fun byteBudgetMessage(projectedBytes: Long, workspaceDocumentBytes: Long): String? =
     if (projectedBytes > workspaceDocumentBytes) "The entity workspace is full ($workspaceDocumentBytes bytes of documents)" else null
 
 /** A reference that MAY NOT be dropped: a `required: true` relation, or a `format: team|user` property in `schema.required`. */

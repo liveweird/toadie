@@ -18,8 +18,14 @@ import TierFocusSelect from "./TierFocusSelect";
  */
 export default function EntityGraphFilterControls({
   controls,
+  showFocus = true,
 }: {
-  controls: EntityGraphFilterControlsState;
+  /** The bulk-change page (2.38.0) supplies no Focus pair — it passes `showFocus={false}`. */
+  controls: Omit<EntityGraphFilterControlsState, "focus" | "setFocus"> &
+    Partial<Pick<EntityGraphFilterControlsState, "focus" | "setFocus">>;
+  /** The tier Focus select (2.18.0) — `false` on the bulk-change page, whose scope is ONE
+   *  blueprint picked by the pill row, so there is no set of blueprints for a Focus to narrow. */
+  showFocus?: boolean;
 }) {
   const { t } = useTranslation();
   const { options: teams } = useEntityOptions(TEAM_BLUEPRINT);
@@ -50,7 +56,9 @@ export default function EntityGraphFilterControls({
         clearButtonProps={{ "aria-label": t("entityGraph.filter.clearTeam") }}
         w={240}
       />
-      <TierFocusSelect value={controls.focus} onChange={controls.setFocus} />
+      {showFocus && controls.setFocus && (
+        <TierFocusSelect value={controls.focus ?? null} onChange={controls.setFocus} />
+      )}
     </>
   );
 }

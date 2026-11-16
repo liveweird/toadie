@@ -1,0 +1,101 @@
+{
+  "title": "Zmiana zbiorcza",
+  "open": "Zmiana zbiorcza",
+  "loadFailed": "Nie udało się wczytać encji",
+  "pickBlueprint": "Wybierz powyżej blueprint, aby zmienić jego encje zbiorczo.",
+  "empty": "Nie ma nic do pokazania — żadna encja tego blueprintu nie pasuje.",
+  "blueprintsLabel": "Blueprint",
+  "expandAll": "Rozwiń wszystko",
+  "collapseAll": "Zwiń wszystko",
+  "toggleAria": "Przełącz elementy podrzędne {{name}}",
+  "selectAria": "Zaznacz: {{name}}",
+  "selectGroupAria_one": "Zaznacz {{count}} encję w gałęzi {{name}}",
+  "selectGroupAria_few": "Zaznacz wszystkie {{count}} encje w gałęzi {{name}}",
+  "selectGroupAria_many": "Zaznacz wszystkie {{count}} encji w gałęzi {{name}}",
+  "selectGroupAria_other": "Zaznacz wszystkie {{count}} encji w gałęzi {{name}}",
+  "selectAllAria_one": "Zaznacz {{count}} encję",
+  "selectAllAria_few": "Zaznacz wszystkie {{count}} encje",
+  "selectAllAria_many": "Zaznacz wszystkie {{count}} encji",
+  "selectAllAria_other": "Zaznacz wszystkie {{count}} encji",
+  "shown": "Wyświetlone encje: {{count}}",
+  "selected": "Zaznaczono: {{count}}",
+  "overCap": "Zaznacz co najwyżej {{max}} encji w jednej zmianie zbiorczej.",
+  "confirm": "Zatwierdź",
+  "back": "Wstecz",
+  "valuesOmitted": "Wartości zbyt długie, by je pokazać",
+  "valueRequired": "Podaj wartość do ustawienia. Aby usunąć wartość, użyj opcji Wyczyść.",
+  "itemsRequired": "Podaj co najmniej jeden element.",
+  "resultsTableLabel": "Wyniki zmiany zbiorczej",
+  "column": {
+    "entity": "Encja",
+    "result": "Wynik",
+    "change": "Zmiana",
+    "detail": "Szczegóły"
+  },
+  "summary": {
+    "check": "Zostanie zaktualizowanych: {{updated}}, bez zmian: {{unchanged}}, nie można zmienić: {{failed}}.",
+    "apply": "Zaktualizowano: {{updated}}, bez zmian: {{unchanged}}, nie zmieniono: {{failed}}."
+  },
+  "checkStatus": {
+    "UPDATED": "Zostanie zaktualizowana",
+    "UNCHANGED": "Bez zmian",
+    "INVALID": "Niepoprawna",
+    "STALE": "Nieaktualna",
+    "ERROR": "Błąd"
+  },
+  "status": {
+    "UPDATED": "Zaktualizowana",
+    "UNCHANGED": "Bez zmian",
+    "INVALID": "Niepoprawna",
+    "STALE": "Nieaktualna",
+    "ERROR": "Błąd"
+  },
+  "modal": {
+    "title": "Zmiana zbiorcza",
+    "intro_one": "Zmień jedno pole w {{count}} zaznaczonej encji ({{blueprint}}).",
+    "intro_few": "Zmień jedno pole w {{count}} zaznaczonych encjach ({{blueprint}}).",
+    "intro_many": "Zmień jedno pole w {{count}} zaznaczonych encjach ({{blueprint}}).",
+    "intro_other": "Zmień jedno pole w {{count}} zaznaczonych encjach ({{blueprint}})."
+  },
+  "field": {
+    "label": "Pole do zmiany",
+    "placeholder": "Wybierz pole"
+  },
+  "group": {
+    "properties": "Właściwości",
+    "relations": "Relacje",
+    "ownership": "Własność"
+  },
+  "operation": {
+    "label": "Operacja",
+    "SET": "Ustaw",
+    "CLEAR": "Wyczyść",
+    "ADD": "Dodaj elementy",
+    "REMOVE": "Usuń elementy"
+  },
+  "operationHint": {
+    "SET": "Zastępuje bieżącą wartość w każdej zaznaczonej encji.",
+    "CLEAR": "Usuwa wartość z każdej zaznaczonej encji.",
+    "ADD": "Dodaje poniższe elementy do bieżącej listy; elementy, które już na niej są, nie są powielane.",
+    "REMOVE": "Usuwa poniższe elementy z bieżącej listy; lista, która zostanie pusta, traci to pole."
+  },
+  "preview": {
+    "action": "Podgląd",
+    "intro": "Podgląd operacji „{{operation}}” na polu „{{field}}” — nic nie zostanie zapisane, dopóki jej nie zastosujesz."
+  },
+  "apply_one": "Zastosuj do {{count}} encji",
+  "apply_few": "Zastosuj do {{count}} encji",
+  "apply_many": "Zastosuj do {{count}} encji",
+  "apply_other": "Zastosuj do {{count}} encji",
+  "result": {
+    "failedHint": "Encje, które nie zostały zmienione, pozostają zaznaczone — możesz je poprawić i spróbować ponownie."
+  },
+  "error": {
+    "invalid": "Serwer odrzucił tę zmianę. Sprawdź pole i wartość albo zaznacz mniej encji i spróbuj ponownie.",
+    "busy": "Serwer jest zajęty odczytem innych danych. Spróbuj ponownie za chwilę.",
+    "applyUnknown": "Wynik jest nieznany: żądanie nie powiodło się lub przekroczyło limit czasu, więc część encji mogła już zostać zmieniona. Wróć i wykonaj podgląd ponownie, zanim zrobisz cokolwiek innego."
+  },
+  "toast": {
+    "applied": "Zastosowano zmianę zbiorczą"
+  }
+}

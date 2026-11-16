@@ -3,8 +3,10 @@ import type { TFunction } from "i18next";
 import type { Blueprint } from "../api/blueprints";
 import type { Entity } from "../api/entities";
 import {
+  blankEntityForm,
   emptyEntityForm,
   entityDeleteErrorMessage,
+  entityFieldError,
   entityFormValidation,
   entitySaveErrorMessage,
   fromEntityResponse,
@@ -81,6 +83,21 @@ describe("emptyEntityForm", () => {
     expect(form.properties.map((p) => p.id)).toEqual(["name", "tier", "active", "tags", "homepage", "link", "notes"]);
     expect(form.relations.map((r) => r.id)).toEqual(["system", "dependsOn"]);
     expect(form.properties.every((p) => !p.unknown)).toBe(true);
+  });
+});
+
+describe("blankEntityForm", () => {
+  test("seeds the same drafts as emptyEntityForm but never a declared default", () => {
+    const blueprint = {
+      ...BLUEPRINT,
+      schema: { ...BLUEPRINT.schema, properties: { ...BLUEPRINT.schema.properties, level: { type: "string", default: "gold" } } },
+    } as unknown as Blueprint;
+    expect(emptyEntityForm(blueprint).properties.find((p) => p.id === "level")?.text).toBe("gold");
+    const blank = blankEntityForm(blueprint);
+    expect(blank.properties.map((p) => p.id)).toEqual(emptyEntityForm(blueprint).properties.map((p) => p.id));
+    expect(blank.relations.map((r) => r.id)).toEqual(["system", "dependsOn"]);
+    expect(blank.properties.every((p) => p.text === "" && p.bool === "" && p.list.length === 0 && p.json === "")).toBe(true);
+    expect(blank.team).toEqual([]);
   });
 });
 
@@ -772,5 +789,44 @@ describe("entityForm — defensive and edge branches", () => {
     const parentIndex = base.relations.findIndex((r) => r.id === "parent");
     expect(validate.relations.single("", base, `relations.${kidsIndex}.single`)).toBeNull();
     expect(validate.relations.many([], base, `relations.${parentIndex}.many`)).toBeNull();
+  });
+});
+
+describe("entityFieldError (the bulk change's single-field validation)", () => {
+  const bounded = {
+    ...BLUEPRINT,
+    schema: {
+      properties: {
+        tags: { type: "array", items: { type: "string", enum: ["a", "b", "c"] }, minItems: 2, uniqueItems: true },
+        note: { type: "string", maxLength: 3 },
+      },
+      required: [],
+    },
+    relations: { owner: { title: "Owner", target: "team", required: true, many: false } },
+  } as unknown as Blueprint;
+  const blank = blankEntityForm(bounded);
+  const withTags = (list: string[]): EntityFormValues => ({
+    ...blank,
+    properties: blank.properties.map((p) => (p.id === "tags" ? { ...p, list } : p)),
+  });
+
+  test("a whole-array SET judges the count and uniqueness; the ADD/REMOVE delta only the items", () => {
+    expect(entityFieldError(t, bounded, withTags(["a"]), "properties.0.list")).toBe("entities.validation.minItems");
+    expect(entityFieldError(t, bounded, withTags(["a", "a"]), "properties.0.list")).toBe("entities.validation.uniqueItems");
+    expect(entityFieldError(t, bounded, withTags(["a"]), "properties.0.list", true)).toBeNull();
+    expect(entityFieldError(t, bounded, withTags(["a", "a"]), "properties.0.list", true)).toBeNull();
+    // An item outside the enum is wrong in both readings.
+    expect(entityFieldError(t, bounded, withTags(["z"]), "properties.0.list", true)).toBe("entities.validation.enum");
+  });
+
+  test("dispatches text, relation and team paths and ignores slots without a rule", () => {
+    const longNote = { ...blank, properties: blank.properties.map((p) => (p.id === "note" ? { ...p, text: "toolong" } : p)) };
+    expect(entityFieldError(t, bounded, longNote, "properties.1.text")).toBe("entities.validation.maxLength");
+    expect(entityFieldError(t, bounded, blank, "relations.0.single")).toBe("entities.validation.required");
+    expect(entityFieldError(t, bounded, blank, "relations.0.many")).toBeNull();
+    expect(entityFieldError(t, bounded, { ...blank, team: Array(51).fill("x") }, "team")).toBe("entities.validation.teamCount");
+    expect(entityFieldError(t, bounded, blank, "properties.1.bool")).toBeNull();
+    expect(entityFieldError(t, bounded, blank, "properties.9.text")).toBeNull();
+    expect(entityFieldError(t, bounded, blank, "nonsense.0.x")).toBeNull();
   });
 });

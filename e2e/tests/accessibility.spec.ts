@@ -75,6 +75,9 @@ const AUTHED_PAGES: { path: string; heading: string }[] = [
   { path: "/blueprints", heading: "Blueprints" },
   { path: "/blueprints/new", heading: "New blueprint" },
   { path: "/entities", heading: "Entities" },
+  // With a blueprint chosen (the seeded system `_team`, always present): the pick pills and the
+  // selection surface render, not just the "pick a blueprint" empty state.
+  { path: "/entities/bulk-change?blueprint=_team", heading: "Bulk change" },
   { path: "/entity-graph", heading: "Entity graph" },
   { path: "/entity-hierarchy", heading: "Entity hierarchy" },
   { path: "/ontology/import", heading: "Import ontology" },

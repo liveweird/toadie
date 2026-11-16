@@ -169,6 +169,20 @@ describe("EntityHierarchy page", () => {
     ).toBe(false);
   });
 
+  test("the Bulk change link carries the one visible blueprint, and none while several are shown", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText("Platform");
+    expect(screen.getByRole("link", { name: "Bulk change" })).toHaveAttribute("href", "/entities/bulk-change");
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+    await user.click(within(screen.getByRole("group", { name: "Blueprints" })).getByText("service", { exact: true }));
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Bulk change" })).toHaveAttribute("href", "/entities/bulk-change?blueprint=team"),
+    );
+  });
+
   test("shows an alert when the graph fails to load", async () => {
     mockGraph(mockFetch, { title: "boom", status: 500 }, 500);
     renderPage();

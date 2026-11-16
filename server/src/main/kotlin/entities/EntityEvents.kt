@@ -60,13 +60,16 @@ data class EntityEventDescriptor(
  * Why an entity write happened, which decides both the event's `origin` param and the replace
  * rule ([replaceEvent]): [EDIT] is the ordinary create/PUT, [SYNC] the entity's own HTTP re-sync,
  * [IMPORT] pass one of the batch import (REST import, the conversion import and every MCP write
- * all ride it) and [IMPORT_DEFERRED] its pass-two restoration of the references pass one withheld.
+ * all ride it), [IMPORT_DEFERRED] its pass-two restoration of the references pass one withheld and
+ * [BULK] one row of the bulk change of a single property across a blueprint's entities
+ * (`entities/EntityBulk.kt`; the event additionally carries the run's `bulkId`).
  */
 enum class EntityWriteKind(internal val origin: String?) {
     EDIT(null),
     SYNC(null),
     IMPORT("import"),
     IMPORT_DEFERRED("import-deferred"),
+    BULK("bulk"),
 }
 
 /** The `origin` of an event minted by the rename cascade's rewrite of a referrer. */
@@ -267,13 +270,15 @@ internal fun entityCreationEvent(blueprint: String, kind: EntityWriteKind = Enti
  * (pulling the remote copy is itself the act worth recording); an import row that stamps a sync
  * ([synced], a batch `sourceUrl`) is UPDATED when it changed something and SYNCED otherwise; any
  * other write is UPDATED only when something changed — a no-op PUT mints nothing (null).
- * [cascaded] is the count of referrers a rename rewrote.
+ * [cascaded] is the count of referrers a rename rewrote; [bulkId] is the bulk change run the write belongs to
+ * (only [EntityWriteKind.BULK] passes one).
  */
 internal fun replaceEvent(
     kind: EntityWriteKind,
     synced: Boolean,
     changes: EntityChangeSet,
     cascaded: Int,
+    bulkId: String? = null,
 ): EntityEventDescriptor? {
     val type = when {
         kind == EntityWriteKind.SYNC -> EntityEventType.SYNCED
@@ -283,6 +288,7 @@ internal fun replaceEvent(
     }
     val params = buildMap {
         kind.origin?.let { put("origin", it) }
+        bulkId?.let { put("bulkId", it) }
         if (cascaded > 0) put("cascaded", cascaded.toString())
         putAll(changes.params())
     }

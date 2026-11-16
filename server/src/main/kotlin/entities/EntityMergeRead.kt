@@ -29,6 +29,8 @@ internal data class StoredEntity(
     val team: JsonElement?,
     val properties: JsonObject,
     val relations: JsonObject,
+    /** The row's write-version stamp as read WITH the document (the bulk change's staleness token); 0 where a caller never needs it. */
+    val updatedAt: Long = 0L,
 )
 
 /**
@@ -53,11 +55,11 @@ internal suspend fun EntityService.readStoredEntities(
         reservation.reserve(ids.sumOf { snapshot.bytesFor(it) } * ENTITY_SHOWN_ROW_RATIO)
         val entities = EntityService.Entities
         val blueprints = BlueprintService.Blueprints
-        // Only what a merge reads: no creator join, no source/sync columns.
+        // Only what a merge (or a bulk change) reads: no creator join, no source/sync columns.
         entities.join(blueprints, JoinType.INNER, onColumn = entities.blueprintId, otherColumn = blueprints.id)
             .select(
                 entities.id, blueprints.identifier, entities.identifier, entities.title, entities.icon, entities.team,
-                entities.document,
+                entities.document, entities.updatedAt,
             )
             .where { (entities.id inList ids) and active() }
             .map { row ->
@@ -71,6 +73,7 @@ internal suspend fun EntityService.readStoredEntities(
                     team = row[entities.team]?.let { blueprintJson.decodeFromString<JsonElement>(it) },
                     properties = document.properties,
                     relations = document.relations,
+                    updatedAt = row[entities.updatedAt],
                 )
             }
             .toList()

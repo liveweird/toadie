@@ -32,6 +32,7 @@ const EditBlueprint = lazy(() => import("./pages/EditBlueprint"));
 const Entities = lazy(() => import("./pages/Entities"));
 const CreateEntity = lazy(() => import("./pages/CreateEntity"));
 const EditEntity = lazy(() => import("./pages/EditEntity"));
+const EntityBulkChange = lazy(() => import("./pages/EntityBulkChange"));
 const EntityGraph = lazy(() => import("./pages/EntityGraph"));
 const EntityHierarchy = lazy(() => import("./pages/EntityHierarchy"));
 const EntityErrorsPage = lazy(() => import("./pages/EntityErrors"));
@@ -225,6 +226,7 @@ export default function App() {
             <Route path="blueprints/:id/edit" element={<EditBlueprint />} />
             <Route path="entities" element={<Entities />} />
             <Route path="entities/new" element={<CreateEntity />} />
+            <Route path="entities/bulk-change" element={<EntityBulkChange />} />
             <Route path="entities/:id/edit" element={<EditEntity />} />
             <Route path="entity-graph" element={<EntityGraph />} />
             <Route path="entity-hierarchy" element={<EntityHierarchy />} />

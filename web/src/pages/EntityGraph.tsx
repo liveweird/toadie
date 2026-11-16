@@ -32,6 +32,7 @@ import { getEntityGraph, type EntityGraph, type EntityGraphNode as EntityGraphNo
 import CaptionedChipGroup from "../components/CaptionedChipGroup";
 import ClusterFrames from "../components/ClusterFrames";
 import EntityGraphNode from "../components/EntityGraphNode";
+import BulkChangeButton from "../components/BulkChangeButton";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
 import EntityNodeContextMenu, { type EntityNodeContextMenuTarget } from "../components/EntityNodeContextMenu";
 import EntityQueryBar from "../components/EntityQueryBar";
@@ -65,6 +66,7 @@ import {
   relationsOf,
   toFoldable,
 } from "../utils/entityGraph";
+import { singleVisibleBlueprint } from "../utils/entityBulk";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { useEntityQuery } from "../hooks/useEntityQuery";
 import { useQueryDiagnostics } from "../hooks/useQueryDiagnostics";
@@ -496,6 +498,12 @@ export default function EntityGraph() {
             </Popover.Dropdown>
           </Popover>
         </Group>
+        <BulkChangeButton
+          size="xs"
+          blueprint={singleVisibleBlueprint(filters.values.blueprints, activeBlueprints)}
+          q={filters.values.q}
+          team={filters.values.team}
+        />
       </EntityGraphToolbar>
 
       {layout.phase === "loading" && (

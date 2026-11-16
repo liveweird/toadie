@@ -80,6 +80,15 @@ class EntitiesRoute {
         class Check(val parent: Import = Import())
     }
 
+    // 2.38.0: bulk change of one field across a blueprint's entities — the same literal-segment + Check shape as Import.
+    @Serializable
+    @Resource("bulk-change")
+    class BulkChange(val parent: EntitiesRoute = EntitiesRoute()) {
+        @Serializable
+        @Resource("check")
+        class Check(val parent: BulkChange = BulkChange())
+    }
+
     // Phase 7 (2.0.0, entity query bar): a second literal segment, the same Import.Check shape.
     @Serializable
     @Resource("query")
@@ -273,6 +282,19 @@ fun Application.configureEntityRoutes() {
                     auditImportedEntityMutation(caller.userId, mutation)
                 }
                 call.respondEntity(HttpStatusCode.OK, EntityImportResponse(rows))
+            }
+            // 2.38.0 bulk change: any authenticated user, the shared-workspace rule (no admin gate). The dry-run and the real run share
+            // ONE classification (EntityBulkPlan.kt); only the real run writes and audits, one entity.updated per committed row.
+            post<EntitiesRoute.BulkChange.Check> {
+                call.caller()
+                val request = call.receive<EntityBulkChangeRequest>()
+                call.respondEntity(HttpStatusCode.OK, entityService.bulkChangeCheck(request))
+            }
+            post<EntitiesRoute.BulkChange> {
+                val caller = call.caller()
+                val request = call.receive<EntityBulkChangeRequest>()
+                val response = entityService.bulkChange(request, caller.userId) { commit -> auditBulkChangedEntity(caller.userId, commit) }
+                call.respondEntity(HttpStatusCode.OK, response)
             }
             // Phase 7 (2.0.0, entity query bar): the editor's live-diagnostics call — a pure
             // read (never evaluates the query), so no audit event (the `/errors`/`/check`

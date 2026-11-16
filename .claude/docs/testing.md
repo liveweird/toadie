@@ -363,11 +363,11 @@ sourceUrl-only change records, an unchanged sync still records SYNCED, a rename'
 the cascade events across relations / team / format team|user, `origin=import` and pass two's
 `import-deferred`, EXISTS/INVALID/STALE rows mint nothing, document text never reaches the stored
 params — including the text of a property the blueprint has since dropped or that carries a `spec` —
-DELETED outlives the entity). `EntityAtomicHistoryTest` ports `withFailingEventInsert` to
+DELETED outlives the entity, a bulk write's `origin=bulk` + `bulkId`). `EntityAtomicHistoryTest` ports `withFailingEventInsert` to
 `entity_events` (a failed CREATED leaves no row; failed UPDATED/SYNCED/DELETED leave the entity
 row byte-equal by `row_to_json`; a failed event at the end of a rename rolls back the rename and every cascaded referrer;
 a failed import row is an ERROR while its neighbours keep rows and events, and so does a failed
-pass two; two overlapping PUTs queued behind `EntityWriteBarrier` each diff from their committed
+pass two and a failed bulk-change row; two overlapping PUTs queued behind `EntityWriteBarrier` each diff from their committed
 predecessor). `EntityWriteSitesTest` is the source grep (the `SsoConfigTest` idiom, whitespace-joined
 and alias-aware, with a self-test on synthetic sources) pinning the four write sites of the
 `entities` table and the single `replaceRow` caller, the Enforcement of `persistence.md` "Entity mutations and
@@ -591,6 +591,17 @@ once it closes with nothing in flight; "decided entirely at admission" measures 
 peak P and pins capacity P admits it (peak still P) while P - 1 refuses; and the paged list,
 `read`, `check` and the `importCheck` dry-run succeed on a capacity-1 ledger without ever touching
 it (`peak` 0). `ReadLedgerTest` and the entity suites are the shared mechanics (above).
+
+**Entity bulk change (2.38.0).** `EntityBulkPlanTest` is the pure planner (`entities/EntityBulk.kt` + `EntityBulkPlan.kt`, no database): the
+request-level shape and field rules, `SET`/`CLEAR`/`ADD`/`REMOVE` semantics (set-like order-preserving ADD, a REMOVE that empties a list, a
+bare-string `team` as a one-item list), then one case per classification step in its documented order (inactive -> `STALE`, other blueprint ->
+`INVALID`, client stamp -> `STALE`, no recorded difference -> `UNCHANGED` even over an already-invalid entity, PUT shape, whole-document findings,
+the running byte budget, `UPDATED`) plus the 2,000-character `valuesOmitted` cap and request-order results. `EntityBulkChangeTest` drives it:
+401 before any body 400 on both endpoints, a plain USER allowed, every request-level 400 on both endpoints (and a negative body id), dry-run
+parity row by row with nothing stored/recorded by the check, the audit line (`bulk`/`bulkId`/`field`, never the value) and the `origin=bulk`
+history event, a stale client stamp and an edit landing under the write lock (a row trigger moves the next row's `updated_at`) each leaving the
+foreign edit intact with no audit line and no event, list/relation/team fields end to end, and the read ledger's `400`/`429` through
+`TestEntities.tunedService(readLedger = ...)` with every reservation released.
 
 **Ontology import (v1.28.0).** `BlueprintImportPlanTest` and `EntityImportPlanTest` are the pure
 planners (`blueprints/BlueprintImport.kt`/`entities/EntityImport.kt`, no database): one case per

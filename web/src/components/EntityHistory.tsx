@@ -51,6 +51,7 @@ function describeEvent(event: EntityEvent, fields: string, t: TFunction): string
     case "UPDATED":
       if (params.origin === "import") return t("entities.event.updatedImport", { fields });
       if (params.origin === "import-deferred") return t("entities.event.updatedImportDeferred", { fields });
+      if (params.origin === "bulk") return t("entities.event.updatedBulk", { fields });
       if (params.origin === "cascade" && params.causeFrom && params.causeTo) {
         return t("entities.event.updatedCascade", {
           fields,

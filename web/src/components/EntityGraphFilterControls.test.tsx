@@ -101,4 +101,11 @@ describe("EntityGraphFilterControls", () => {
     await user.click(screen.getByLabelText("Clear focus"));
     expect(setFocus).toHaveBeenCalledWith(null);
   });
+
+  test("showFocus={false} (the bulk-change page) leaves the tier Focus select out", () => {
+    const { rerender } = renderWithProviders(<EntityGraphFilterControls controls={controls()} />);
+    expect(screen.getByRole("combobox", { name: "Focus" })).toBeInTheDocument();
+    rerender(<EntityGraphFilterControls controls={controls()} showFocus={false} />);
+    expect(screen.queryByRole("combobox", { name: "Focus" })).not.toBeInTheDocument();
+  });
 });

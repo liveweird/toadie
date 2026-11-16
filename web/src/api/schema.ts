@@ -2360,6 +2360,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entities/bulk-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change one field across several entities of one blueprint (report & skip)
+         * @description Any authenticated user — entities are a shared workspace, no admin gate (2.38.0,
+         *     `.claude/docs/port-data-model.md` "Bulk change"). Applies ONE operation to ONE field of
+         *     up to 200 entities of the SAME blueprint, in a single request. Every changed entity is
+         *     an ordinary strict entity write (the `PUT` rules: findings over the whole document, the
+         *     workspace byte budget, the write lock) with its own history event and its own
+         *     `entity.updated` audit line; one row failing never fails its siblings, and nothing is
+         *     rolled back across rows. `field` uses the findings path grammar: `properties.<id>`,
+         *     `relations.<id>` or `team`. `operation`: `SET` replaces the value (`value` required),
+         *     `CLEAR` removes it (no `value`; a required field then fails its row's findings),
+         *     `ADD`/`REMOVE` add or remove items of a LIST field (an `array` property, a `many`
+         *     relation, `team`; `value` a non-empty array — ADD is set-like and order-preserving, a
+         *     REMOVE that empties the list drops the key).
+         *
+         *     Per-row statuses, decided in this order by the SAME classification as
+         *     `checkEntityBulkChange`: `STALE` (the entity is no longer active, or the row's
+         *     `updatedAt` differs from the stored write-version, or an edit landed between the
+         *     classification and the write — checked atomically under the write lock; nothing
+         *     stored), `INVALID` (another blueprint's entity, the PUT shape rules or the
+         *     whole-document findings of the AFTER state refuse it — `findings` carries the rule table's
+         *     verdict — or the workspace byte budget is exhausted), `UNCHANGED` (the operation changes
+         *     nothing the history would record: no write, `updatedAt` unmoved), `UPDATED` (written;
+         *     `updatedAt` is the new stamp), `ERROR` (an unexpected storage failure). A source-bound
+         *     entity keeps its source reference and sync baseline, so it reads as locally changed
+         *     afterwards. Computed properties, `identifier`, `title`, `icon`, `sourceUrl` and the
+         *     `team` of an Inherited-ownership blueprint cannot be changed through this endpoint.
+         *
+         *     `bulkId` is minted by the server for this run; it rides each written entity's history
+         *     event (`origin: bulk`, `bulkId`) and its audit line, and nothing else — there is no bulk
+         *     log and no undo. `before`/`after` show the field's value (absent = no value) up to 2000
+         *     encoded characters each; beyond that both are withheld and `valuesOmitted` is `true`.
+         *
+         *     The `400` covers only the request itself (an undecodable body, no entity or more than
+         *     200, a repeated id, a negative `updatedAt`, an unknown blueprint, a `field` outside
+         *     the grammar above or over 111 characters, a field that is undeclared, computed or the
+         *     team of an Inherited blueprint, an operation that does not fit the field or its
+         *     `value`, a `value` over 262144 bytes) and a stored workspace too large for the server's
+         *     read budget; `429` means other workspace reads are in flight. The request body is also
+         *     bounded by the server-wide request-size limit (`413`).
+         */
+        post: operations["bulkChangeEntities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/entities/bulk-change/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dry-run a bulk entity change (nothing is stored)
+         * @description Any authenticated user. The IDENTICAL request rules and per-row classification
+         *     `bulkChangeEntities` runs, reported as predictions and storing nothing: `UPDATED` reads
+         *     "would be written", `STALE` also covers a row whose `updatedAt` no longer matches. A pure
+         *     read of the targets' stored documents: no audit events, no history events, no `bulkId`.
+         *     The report is a snapshot — an edit landing between the check and the real run turns that
+         *     row `STALE` there. The same `400`/`429` as `bulkChangeEntities`.
+         */
+        post: operations["checkEntityBulkChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/entities/import": {
         parameters: {
             query?: never;
@@ -4064,7 +4146,9 @@ export interface components {
              *     (the bulk import, the conversion import and every MCP write), `import-deferred`
              *     (the import's second pass restoring the references the first pass withheld) or
              *     `cascade` (a referrer rewritten because another entity was renamed; carries
-             *     `causeEntityId`, `causeBlueprint`, `causeFrom` and `causeTo`). A renamed entity's
+             *     `causeEntityId`, `causeBlueprint`, `causeFrom` and `causeTo`) or `bulk` (one row of
+             *     a bulk change of one field across several entities; carries `bulkId`, the run's
+             *     identifier, shared by every entity that run wrote). A renamed entity's
              *     own event carries `cascaded`, the number of referrers rewritten.
              *
              *     `UPDATED` and `SYNCED` carry the field-level diff: `changed` comma-joins the
@@ -4154,6 +4238,65 @@ export interface components {
         EntityImportResponse: {
             /** @description One result per submitted document, in submission order. */
             results: components["schemas"]["EntityImportRow"][];
+        };
+        EntityBulkChangeRequest: {
+            /** @description The blueprint identifier every target must belong to (an unknown one is a `400`). */
+            blueprint: string;
+            /** @description The field to change, in the findings path grammar: `properties.<id>` (a declared, non-computed property), `relations.<id>` (a declared relation) or `team` (not on an Inherited-ownership blueprint). `identifier`, `title`, `icon` and `sourceUrl` are not changeable here. At most 111 characters (`properties.` + a 100-character id). */
+            field: string;
+            /**
+             * @description `SET` replaces (needs `value`), `CLEAR` removes (no `value`), `ADD`/`REMOVE` add or remove items of a list field (an `array` property, a `many` relation, `team`) and need a non-empty array `value`.
+             * @enum {string}
+             */
+            operation: "SET" | "CLEAR" | "ADD" | "REMOVE";
+            /** @description Any JSON value, typed by the field: the new value for `SET`, the items for `ADD`/`REMOVE`, absent for `CLEAR`. At most 262144 encoded bytes. An explicit JSON `null` counts as absent. */
+            value?: unknown;
+            /** @description The target entities, distinct ids, all of the named blueprint. */
+            entities: components["schemas"]["EntityBulkTarget"][];
+        };
+        EntityBulkTarget: {
+            /** Format: int32 */
+            id: number;
+            /**
+             * Format: int64
+             * @description The entity's `updatedAt` as the client read it. When given and different from the stored one, the row is `STALE`; omitted = unguarded by the client (the write itself is still guarded against the document it classified).
+             */
+            updatedAt?: number;
+        };
+        /**
+         * @description UPDATED — written (a dry-run: would be). UNCHANGED — the operation changes nothing the history would record; not written. INVALID — refused by the PUT rules, the after-state's findings or the byte budget (`findings` set for the rule table), or an entity of another blueprint. STALE — no longer active, or changed since it was read; nothing stored. ERROR — an unexpected storage failure.
+         * @enum {string}
+         */
+        EntityBulkStatus: "UPDATED" | "UNCHANGED" | "INVALID" | "STALE" | "ERROR";
+        EntityBulkResult: {
+            /** Format: int32 */
+            id: number;
+            /** @description The entity's identifier; absent when the entity is no longer active. */
+            identifier?: string;
+            /** @description The entity's title; absent when the entity is no longer active. */
+            title?: string;
+            status: components["schemas"]["EntityBulkStatus"];
+            /** @description Present on every status except a clean `UPDATED`/`UNCHANGED`. */
+            message?: string;
+            /** @description Present on an `INVALID` row refused by the blueprint's rule table. */
+            findings?: components["schemas"]["EntityFinding"][];
+            /**
+             * Format: int64
+             * @description The entity's stored write-version after this row's outcome — the new stamp for `UPDATED`, the current one otherwise (a `STALE` row carries the CURRENT stored stamp, so a retry with it is not stale again); absent when the entity is no longer active, and on a `STALE` row whose current stamp could not be read.
+             */
+            updatedAt?: number;
+            /** @description The field's stored value before the change (any JSON); absent = it had no value, or `valuesOmitted`. */
+            before?: unknown;
+            /** @description The field's value after the change (any JSON); absent = no value (CLEAR), or `valuesOmitted`. */
+            after?: unknown;
+            /** @description Present and `true` when `before`/`after` exceeded 2000 encoded characters and were withheld. */
+            valuesOmitted?: boolean;
+        };
+        EntityBulkChangeResponse: {
+            /** @description The run's server-minted identifier (UUID) — real run only; the `bulkId` param of each written row's history event. */
+            bulkId?: string;
+            /** @description One result per requested entity, in request order. */
+            results: components["schemas"]["EntityBulkResult"][];
         };
         EntityGraphNode: {
             /** @description Canonical node id `"<blueprint>|<identifier>"` (the dedupe key; `|` appears in neither charset, so the split is unambiguous). */
@@ -7789,6 +7932,64 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    bulkChangeEntities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityBulkChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description One result per requested entity, in request order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityBulkChangeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    checkEntityBulkChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntityBulkChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description One predicted result per requested entity, in request order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityBulkChangeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalServerError"];
         };

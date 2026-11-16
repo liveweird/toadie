@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { jsonResponse } from "../test/http";
 import { ApiError } from "./http";
-import { entitySaveFindings, getEntityGraph, listEntities } from "./entities";
+import {
+  applyEntityBulkChange,
+  checkEntityBulkChange,
+  entitySaveFindings,
+  getEntityGraph,
+  listEntities,
+} from "./entities";
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
@@ -20,6 +26,18 @@ describe("entities API wrappers", () => {
   });
 
   const lastCall = () => mockFetch.mock.calls.at(-1) as [string, RequestInit];
+
+  test("the bulk-change pair POSTs the request body to the check and the real endpoint", async () => {
+    const body = { blueprint: "service", field: "team", operation: "CLEAR" as const, entities: [{ id: 1, updatedAt: 7 }] };
+    mockFetch.mockImplementation(() => Promise.resolve(jsonResponse(200, { results: [] })));
+    await checkEntityBulkChange(body);
+    expect(lastCall()[0]).toBe("/api/v1/entities/bulk-change/check");
+    expect(lastCall()[1].method).toBe("POST");
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual(body);
+    await applyEntityBulkChange(body);
+    expect(lastCall()[0]).toBe("/api/v1/entities/bulk-change");
+    expect(lastCall()[1].method).toBe("POST");
+  });
 
   test("getEntityGraph with no filters hits the bare path", async () => {
     mockFetch.mockResolvedValue(jsonResponse(200, { nodes: [], edges: [] }));

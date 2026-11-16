@@ -436,6 +436,21 @@ class EntityEventsTest {
     }
 
     @Test
+    fun `a bulk write is an ordinary edit that marks origin=bulk and names its run`() {
+        val none = EntityChangeSet(emptyList())
+        val some = diff(state(), state(title = "T2"))
+        val bulk = replaceEvent(EntityWriteKind.BULK, synced = false, some, cascaded = 0, bulkId = "run-1")!!
+        assertEquals(EntityEventType.UPDATED, bulk.type)
+        assertEquals("bulk", bulk.params["origin"])
+        assertEquals("run-1", bulk.params["bulkId"])
+        assertEquals("title", bulk.params["changed"])
+        // the edit rule still applies: a bulk write that changed nothing mints nothing
+        assertNull(replaceEvent(EntityWriteKind.BULK, synced = false, none, cascaded = 0, bulkId = "run-1"))
+        // and an ordinary write never carries a bulkId
+        assertNull(replaceEvent(EntityWriteKind.EDIT, synced = false, some, cascaded = 0)!!.params["bulkId"])
+    }
+
+    @Test
     fun `a rename event carries the cascade count, a cascade event names its cause and diffs the rewritten reference`() {
         val some = diff(state(), state(title = "T2"))
         val renamed = replaceEvent(EntityWriteKind.EDIT, synced = false, diff(state(), state(identifier = "e2")), cascaded = 3)!!
