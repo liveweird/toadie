@@ -23,13 +23,13 @@ RUN GIT_SHA=$(git rev-parse --short HEAD) \
     npm run build
 
 # ── Stage 2: build the server distribution ────────────────────────────────────
-# Pinned to the mise.toml build (temurin-21.0.12+101.0.LTS, Adoptium's semver for the 21.0.12.1+1
-# respin → the Docker Hub tag 21.0.12.1_1), not a floating "21-jdk" tag that can drift between pulls.
-# The runtime-stage JRE below must stay on the same 21.0.12 update (infrastructure.test.js), but may
+# Pinned to the mise.toml build (temurin-21.0.13+9.0.LTS → the Docker Hub tag 21.0.13_9), not a
+# floating "21-jdk" tag that can drift between pulls.
+# The runtime-stage JRE below must stay on the same 21.0.13 update (infrastructure.test.js), but may
 # run a later respin ahead.
 # Every FROM is also pinned by multi-arch index digest (tag@sha256:...): the tag stays readable
 # and Dependabot's docker ecosystem bumps tag and digest together.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:21.0.12.1_1-jdk@sha256:5d90b26c0784ccf55af55f97cbcf7f3969c66a06299c93bdc72649219942a48f AS server
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21.0.13_9-jdk@sha256:db5cc6341a1d7bc40cdb51e1f0d9824f3bb2cc8107d29da421dc4df7d11f05f1 AS server
 WORKDIR /src
 # Copy build scripts + wrapper first so the Gradle distribution download caches.
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -52,7 +52,7 @@ RUN ./gradlew :server:installDist --no-daemon
 # the OS-layer scan goes red, move to the newest clean base for this update (a new digest or a later
 # respin tag, which may run ahead of the JDK stage), never a runtime-only jump to a later update,
 # never an ignore file.
-FROM eclipse-temurin:21.0.12.1_1-jre@sha256:f37956012e0cb88400e5b3689aeae2d2d735364c1922ae2225536163b5a99f56 AS runtime
+FROM eclipse-temurin:21.0.13_9-jre@sha256:ca73b4d3961703d6d7830a4361f49ef0478f8f28b39defc07bb72f4cc7f834f6 AS runtime
 # Non-root runtime user: the base image's default user is root, and the application never
 # needs to bind a privileged port (8081) or write outside its own install directory. Created
 # BEFORE the COPYs so `--chown` sets ownership in the copy layers themselves — a trailing

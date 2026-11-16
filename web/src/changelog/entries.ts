@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.36.1",
+    date: "2026-11-16",
+    en: `**Java security update.** Toadie now builds, tests and runs its server on Temurin 21.0.13, the October Java update, and its runtime image carries Ubuntu's fixed apt package (CVE-2026-109518). Nothing changes in how Toadie looks or behaves.`,
+    pl: `**Aktualizacja bezpieczeństwa Javy.** Toadie kompiluje, testuje i uruchamia serwer na Temurin 21.0.13, październikowej aktualizacji Javy, a jego obraz uruchomieniowy zawiera poprawiony pakiet apt z Ubuntu (CVE-2026-109518). Wygląd i działanie Toadie się nie zmieniają.`,
+  },
+  {
     version: "2.36.0",
     date: "2026-10-31",
     en: `**Find the missing link.** The entity query language gains the existential predicate: WHERE NOT EXISTS { (s)<-[:consumer]-(:api_adoption)-[:api]->(a) } keeps a match only when no such pattern exists, and EXISTS { … } works the other way round. The block must reuse a variable the query already bound, may carry its own WHERE, and runs under the same two-second budget as the rest of the query. Four new sample saved queries use it to cross-check declared adoptions against the consumes relations in both directions; the sample now carries two retiring declarations whose consumer no longer lists the API or dataset, so each query shows something. EXISTS is now a reserved word, so a variable can no longer be named exists; put the name in backticks to keep using it.`,
