@@ -1,0 +1,93 @@
+{
+  "title": "Bulk change",
+  "open": "Bulk change",
+  "loadFailed": "Could not load the entities",
+  "pickBlueprint": "Pick a blueprint above to change its entities in bulk.",
+  "empty": "Nothing to show — no entities of this blueprint match.",
+  "blueprintsLabel": "Blueprint",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "toggleAria": "Toggle children of {{name}}",
+  "selectAria": "Select {{name}}",
+  "selectGroupAria_one": "Select {{count}} entity in the branch of {{name}}",
+  "selectGroupAria_other": "Select all {{count}} entities in the branch of {{name}}",
+  "selectAllAria_one": "Select {{count}} entity",
+  "selectAllAria_other": "Select all {{count}} entities",
+  "shown": "Entities shown: {{count}}",
+  "selected": "Selected: {{count}}",
+  "overCap": "Select at most {{max}} entities per bulk change.",
+  "confirm": "Confirm",
+  "back": "Back",
+  "valuesOmitted": "Values too long to show",
+  "valueRequired": "Enter a value to set. To remove the value, use Clear.",
+  "itemsRequired": "Enter at least one item.",
+  "resultsTableLabel": "Bulk change results",
+  "column": {
+    "entity": "Entity",
+    "result": "Result",
+    "change": "Change",
+    "detail": "Detail"
+  },
+  "summary": {
+    "check": "Will be updated: {{updated}}, unchanged: {{unchanged}}, cannot be changed: {{failed}}.",
+    "apply": "Updated: {{updated}}, unchanged: {{unchanged}}, not changed: {{failed}}."
+  },
+  "checkStatus": {
+    "UPDATED": "Will update",
+    "UNCHANGED": "Unchanged",
+    "INVALID": "Invalid",
+    "STALE": "Stale",
+    "ERROR": "Error"
+  },
+  "status": {
+    "UPDATED": "Updated",
+    "UNCHANGED": "Unchanged",
+    "INVALID": "Invalid",
+    "STALE": "Stale",
+    "ERROR": "Error"
+  },
+  "modal": {
+    "title": "Bulk change",
+    "intro_one": "Change one field of {{count}} selected {{blueprint}} entity.",
+    "intro_other": "Change one field of {{count}} selected {{blueprint}} entities."
+  },
+  "field": {
+    "label": "Field to change",
+    "placeholder": "Pick a field"
+  },
+  "group": {
+    "properties": "Properties",
+    "relations": "Relations",
+    "ownership": "Ownership"
+  },
+  "operation": {
+    "label": "Operation",
+    "SET": "Set",
+    "CLEAR": "Clear",
+    "ADD": "Add items",
+    "REMOVE": "Remove items"
+  },
+  "operationHint": {
+    "SET": "Replaces the current value on every selected entity.",
+    "CLEAR": "Removes the value from every selected entity.",
+    "ADD": "Adds the items below to the current list; items already there are kept once.",
+    "REMOVE": "Removes the items below from the current list; a list left empty loses the field."
+  },
+  "preview": {
+    "action": "Preview",
+    "intro": "Preview of “{{operation}}” on “{{field}}” — nothing is stored until you apply it."
+  },
+  "apply_one": "Apply to {{count}} entity",
+  "apply_other": "Apply to {{count}} entities",
+  "result": {
+    "failedHint": "Entities that were not changed stay selected, so you can fix them and try again."
+  },
+  "error": {
+    "invalid": "The server refused this change. Check the field and value, or select fewer entities, and try again.",
+    "busy": "The server is busy reading other data. Try again in a moment.",
+    "applyUnknown": "The result is unknown: the request failed or timed out, so some entities may already have been changed. Go back and preview again before trying anything else."
+  },
+  "toast": {
+    "applied": "Bulk change applied"
+  }
+}

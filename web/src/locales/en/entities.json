@@ -141,6 +141,7 @@
     "updated": "Entity updated: {{fields}}.",
     "updatedImport": "Entity updated by import: {{fields}}.",
     "updatedImportDeferred": "Entity updated by import (deferred references): {{fields}}.",
+    "updatedBulk": "Entity updated by a bulk change: {{fields}}.",
     "updatedCascade": "Entity updated after {{blueprint}} “{{from}}” was renamed to “{{to}}”: {{fields}}.",
     "synced": "Synced from the source — no changes.",
     "syncedChanges": "Synced from the source: {{fields}}.",

@@ -143,6 +143,7 @@
     "updated": "Zaktualizowano encję: {{fields}}.",
     "updatedImport": "Zaktualizowano encję przez import: {{fields}}.",
     "updatedImportDeferred": "Zaktualizowano encję przez import (odłożone odwołania): {{fields}}.",
+    "updatedBulk": "Zaktualizowano encję zmianą zbiorczą: {{fields}}.",
     "updatedCascade": "Zaktualizowano encję po zmianie nazwy z „{{from}}” na „{{to}}” ({{blueprint}}): {{fields}}.",
     "synced": "Zsynchronizowano ze źródła — bez zmian.",
     "syncedChanges": "Zsynchronizowano ze źródła: {{fields}}.",

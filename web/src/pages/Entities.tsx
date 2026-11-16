@@ -11,6 +11,7 @@ import { deleteEntity, type Entity } from "../api/entities";
 import ClearableTextInput from "../components/ClearableTextInput";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import EmptyState from "../components/EmptyState";
+import BulkChangeButton from "../components/BulkChangeButton";
 import EntityComputedValue from "../components/EntityComputedValue";
 import EntityFindingsBadge from "../components/EntityFindingsBadge";
 import FilterPanel from "../components/FilterPanel";
@@ -231,6 +232,7 @@ export default function Entities() {
         description={t("entities.intro")}
         actions={
           <Group gap="sm">
+            <BulkChangeButton blueprint={blueprint} q={q} team={team} />
             <Button component={RouterLink} to={ontologyImportPath} variant="default" leftSection={<IconFileImport size={16} />}>
               {t("ontology.importLink")}
             </Button>

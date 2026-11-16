@@ -174,6 +174,19 @@ describe("Entities page", () => {
     expect(await screen.findByRole("link", { name: "Import" })).toHaveAttribute("href", "/ontology/import");
   });
 
+  test("the Bulk change link carries the picked blueprint and team, and is plain without a blueprint", async () => {
+    mockRoutes(mockFetch);
+    const { unmount } = renderWithProviders(<Entities />, { route: "/entities" });
+    expect(await screen.findByRole("link", { name: "Bulk change" })).toHaveAttribute("href", "/entities/bulk-change");
+    unmount();
+
+    renderWithProviders(<Entities />, { route: "/entities?blueprint=service&team=platform" });
+    expect(await screen.findByRole("link", { name: "Bulk change" })).toHaveAttribute(
+      "href",
+      "/entities/bulk-change?blueprint=service&team=platform",
+    );
+  });
+
   test("the row menu's Export JSON downloads that one entity as a Port-shaped document", async () => {
     const createObjectURL = vi.fn().mockReturnValue("blob:fake");
     const revokeObjectURL = vi.fn();

@@ -136,6 +136,22 @@ export function emptyEntityForm(blueprint: Blueprint): EntityFormValues {
   };
 }
 
+/** A BLANK form for a blueprint (2.38.0, the bulk-change value widgets): one empty draft per
+ *  schema property/relation, in schema order — unlike `emptyEntityForm`, the declared defaults
+ *  are NOT prefilled, since a default silently becoming the bulk value would be a hidden write. */
+export function blankEntityForm(blueprint: Blueprint): EntityFormValues {
+  return {
+    blueprint: blueprint.identifier,
+    identifier: "",
+    title: "",
+    icon: "",
+    team: [],
+    properties: Object.keys(blueprint.schema.properties).map(emptyPropertyValueDraft),
+    relations: Object.keys(blueprint.relations).map(emptyRelationValueDraft),
+    sourceUrl: "",
+  };
+}
+
 /** `team`'s wire shape (a scalar, an array, or absent) -> the form's array-only draft — also
  *  used directly by `EntityTeamField` to normalize the STORED/EFFECTIVE `team` an entity
  *  response carries into the pills it renders. */
@@ -353,12 +369,17 @@ function numberRule(t: TFunction, def: PropertyDefinitionWire, value: number): s
   return null;
 }
 
-function arrayRule(t: TFunction, def: PropertyDefinitionWire, value: unknown[]): string | null {
-  if (def.minItems !== undefined && value.length < def.minItems) return t("entities.validation.minItems", { min: def.minItems });
-  if (def.maxItems !== undefined && value.length > def.maxItems) return t("entities.validation.maxItems", { max: def.maxItems });
-  if (def.uniqueItems) {
-    const serialized = value.map((v) => JSON.stringify(v));
-    if (new Set(serialized).size !== serialized.length) return t("entities.validation.uniqueItems");
+/** `itemsOnly` (the bulk change's ADD/REMOVE delta, 2.38.0): the typed list is a DELTA applied to
+ *  each entity's stored list, not the whole array, so the whole-array rules (min/max/unique count)
+ *  are skipped — the server judges the AFTER document — and only the per-item rules apply. */
+function arrayRule(t: TFunction, def: PropertyDefinitionWire, value: unknown[], itemsOnly = false): string | null {
+  if (!itemsOnly) {
+    if (def.minItems !== undefined && value.length < def.minItems) return t("entities.validation.minItems", { min: def.minItems });
+    if (def.maxItems !== undefined && value.length > def.maxItems) return t("entities.validation.maxItems", { max: def.maxItems });
+    if (def.uniqueItems) {
+      const serialized = value.map((v) => JSON.stringify(v));
+      if (new Set(serialized).size !== serialized.length) return t("entities.validation.uniqueItems");
+    }
   }
   if (def.items?.enum && def.items.enum.length > 0) {
     const allowed = def.items.enum.map(String);
@@ -402,7 +423,13 @@ function textFieldError(t: TFunction, blueprint: Blueprint, values: EntityFormVa
   return stringRule(t, def, trimmed);
 }
 
-function listFieldError(t: TFunction, blueprint: Blueprint, values: EntityFormValues, path: string): string | null {
+function listFieldError(
+  t: TFunction,
+  blueprint: Blueprint,
+  values: EntityFormValues,
+  path: string,
+  itemsOnly: boolean,
+): string | null {
   const draft = values.properties[rowIndex(path)];
   if (!draft || draft.unknown) return null;
   const def = blueprint.schema.properties[draft.id];
@@ -414,10 +441,16 @@ function listFieldError(t: TFunction, blueprint: Blueprint, values: EntityFormVa
   if (def.items?.type === "boolean" && draft.list.some((v) => v !== "true" && v !== "false")) {
     return t("entities.validation.enum");
   }
-  return arrayRule(t, def, coerceListItems(draft.list, def.items?.type));
+  return arrayRule(t, def, coerceListItems(draft.list, def.items?.type), itemsOnly);
 }
 
-function jsonFieldError(t: TFunction, blueprint: Blueprint, values: EntityFormValues, path: string): string | null {
+function jsonFieldError(
+  t: TFunction,
+  blueprint: Blueprint,
+  values: EntityFormValues,
+  path: string,
+  itemsOnly: boolean,
+): string | null {
   const draft = values.properties[rowIndex(path)];
   if (!draft) return null;
   if (draft.unknown) return jsonSyntaxError(draft.json, t);
@@ -430,7 +463,9 @@ function jsonFieldError(t: TFunction, blueprint: Blueprint, values: EntityFormVa
   const syntax = jsonSyntaxError(draft.json, t);
   if (syntax) return syntax;
   const parsed = safeJsonParse(draft.json);
-  return def.type === "array" ? arrayRule(t, def, Array.isArray(parsed) ? parsed : []) : objectRule(t, def, parsed);
+  return def.type === "array"
+    ? arrayRule(t, def, Array.isArray(parsed) ? parsed : [], itemsOnly)
+    : objectRule(t, def, parsed);
 }
 
 function relationFieldError(
@@ -455,8 +490,9 @@ function relationFieldError(
 
 /** Validation rules for the create/edit page — grammar and the property/relation table only
  *  (mirrors the server's `entityFindings`); target resolution is left to the server, same as
- *  every other reference field in this app. */
-export function entityFormValidation(t: TFunction, blueprint: Blueprint) {
+ *  every other reference field in this app. `itemsOnly` switches the
+ *  list rules to per-item only — the bulk change's ADD/REMOVE delta. */
+export function entityFormValidation(t: TFunction, blueprint: Blueprint, itemsOnly = false) {
   return {
     identifier: (value: string) => (isValidEntityIdentifier(value.trim()) ? null : t("entities.validation.identifier")),
     title: (value: string) => {
@@ -473,8 +509,10 @@ export function entityFormValidation(t: TFunction, blueprint: Blueprint) {
     sourceUrl: (value: string) => (sourceUrlProblem(value) ? t("entities.validation.sourceUrl") : null),
     properties: {
       text: (_value: string, values: EntityFormValues, path: string) => textFieldError(t, blueprint, values, path),
-      list: (_value: string[], values: EntityFormValues, path: string) => listFieldError(t, blueprint, values, path),
-      json: (_value: string, values: EntityFormValues, path: string) => jsonFieldError(t, blueprint, values, path),
+      list: (_value: string[], values: EntityFormValues, path: string) =>
+        listFieldError(t, blueprint, values, path, itemsOnly),
+      json: (_value: string, values: EntityFormValues, path: string) =>
+        jsonFieldError(t, blueprint, values, path, itemsOnly),
     },
     relations: {
       single: (_value: string, values: EntityFormValues, path: string) =>
@@ -504,4 +542,35 @@ export function entityDeleteErrorMessage(err: unknown, t: TFunction): string {
     failedStatus: "common.error.actionFailedStatus",
     failed: "common.error.actionFailed",
   });
+}
+
+/**
+ * `form.validateField` without a form's captured rule set (2.38.0, the bulk-change value widgets,
+ * whose ADD/REMOVE delta needs `itemsOnly` rules that a `useForm` config — captured once — cannot
+ * switch): the first client-rule message for one form path (`properties.<i>.<slot>`,
+ * `relations.<i>.<slot>` or `team`), `null` when it passes or the path carries no rule.
+ */
+export function entityFieldError(
+  t: TFunction,
+  blueprint: Blueprint,
+  values: EntityFormValues,
+  path: string,
+  itemsOnly = false,
+): string | null {
+  const rules = entityFormValidation(t, blueprint, itemsOnly);
+  const [section, index, slot] = path.split(".");
+  if (section === "team") return rules.team(values.team);
+  if (section === "properties") {
+    const draft = values.properties[Number(index)];
+    if (!draft) return null;
+    if (slot === "text") return rules.properties.text(draft.text, values, path);
+    if (slot === "list") return rules.properties.list(draft.list, values, path);
+    if (slot === "json") return rules.properties.json(draft.json, values, path);
+    return null;
+  }
+  const draft = section === "relations" ? values.relations[Number(index)] : undefined;
+  if (!draft) return null;
+  if (slot === "single") return rules.relations.single(draft.single, values, path);
+  if (slot === "many") return rules.relations.many(draft.many, values, path);
+  return null;
 }

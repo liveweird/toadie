@@ -65,6 +65,7 @@ describe("EntityHistory", () => {
       event("SYNCED"),
       event("UPDATED", { changed: "properties.stage,team", origin: "import-deferred" }),
       event("UPDATED", { changed: "properties.stage", origin: "import" }),
+      event("UPDATED", { changed: "properties.stage", origin: "bulk", bulkId: "b-1" }),
       event("UPDATED", {
         changed: "relations.owner",
         origin: "cascade",
@@ -86,13 +87,14 @@ describe("EntityHistory", () => {
       screen.getByText("Entity updated by import (deferred references): Stage, Team."),
     ).toBeInTheDocument();
     expect(screen.getByText("Entity updated by import: Stage.")).toBeInTheDocument();
+    expect(screen.getByText("Entity updated by a bulk change: Stage.")).toBeInTheDocument();
     expect(
       screen.getByText("Entity updated after team “payments” was renamed to “billing”: Owning team."),
     ).toBeInTheDocument();
     expect(screen.getByText("Entity updated: Stage, Owning team.")).toBeInTheDocument();
     expect(screen.getByText("Entity created by import.")).toBeInTheDocument();
     expect(screen.getByText("Entity created.")).toBeInTheDocument();
-    expect(screen.getAllByText(/Mona Maintainer ·/)).toHaveLength(9);
+    expect(screen.getAllByText(/Mona Maintainer ·/)).toHaveLength(10);
   });
 
   test("an unknown origin falls back to the plain sentence; an incomplete cascade does too", async () => {

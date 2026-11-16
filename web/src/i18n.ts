@@ -16,6 +16,7 @@ import enCatalog from "./locales/en/catalog.json";
 import enChangelog from "./locales/en/changelog.json";
 import enConversion from "./locales/en/conversion.json";
 import enEntities from "./locales/en/entities.json";
+import enEntityBulk from "./locales/en/entityBulk.json";
 import enEntityErrors from "./locales/en/entityErrors.json";
 import enEntityGraph from "./locales/en/entityGraph.json";
 import enEntityHierarchy from "./locales/en/entityHierarchy.json";
@@ -81,6 +82,7 @@ export const en = {
   changelog: enChangelog,
   conversion: enConversion,
   entities: enEntities,
+  entityBulk: enEntityBulk,
   entityErrors: enEntityErrors,
   entityGraph: enEntityGraph,
   entityHierarchy: enEntityHierarchy,

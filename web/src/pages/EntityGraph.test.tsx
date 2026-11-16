@@ -85,6 +85,20 @@ describe("EntityGraph page", () => {
     expect(screen.getByText(/solo \[service\]/)).toBeInTheDocument();
   });
 
+  test("the Bulk change link carries the one visible blueprint, and none while several are shown", async () => {
+    mockGraph(mockFetch);
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByText(/platform \[team\]/);
+    expect(screen.getByRole("link", { name: "Bulk change" })).toHaveAttribute("href", "/entities/bulk-change");
+    await user.click(screen.getByRole("button", { name: /^Visibility/ }));
+    await user.click(within(screen.getByRole("group", { name: "Blueprints" })).getByText("service", { exact: true }));
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Bulk change" })).toHaveAttribute("href", "/entities/bulk-change?blueprint=team"),
+    );
+  });
+
   test("two blueprints draw a frame each, labelled by their title", async () => {
     mockGraph(mockFetch);
     renderPage();

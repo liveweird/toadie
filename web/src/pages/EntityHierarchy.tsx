@@ -6,6 +6,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, IconPin, IconSitemap } from "@tabler/icons-react";
 import { deleteEntity, getEntityGraph, type EntityGraphNode } from "../api/entities";
 import EntityFindingsBadge from "../components/EntityFindingsBadge";
+import BulkChangeButton from "../components/BulkChangeButton";
 import EntityGraphToolbar from "../components/EntityGraphToolbar";
 import EntityQueryActionItems from "../components/EntityQueryActionItems";
 import EntityQueryBar from "../components/EntityQueryBar";
@@ -15,6 +16,7 @@ import HierarchyPicker from "../components/HierarchyPicker";
 import RowActionsMenu from "../components/RowActionsMenu";
 import TierDot from "../components/TierDot";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
+import { singleVisibleBlueprint } from "../utils/entityBulk";
 import { useEntityGraphFilterState } from "../hooks/useEntityGraphFilterState";
 import { useEntityQuery } from "../hooks/useEntityQuery";
 import { useQueryDiagnostics } from "../hooks/useQueryDiagnostics";
@@ -251,6 +253,12 @@ export default function EntityHierarchy() {
             {t("entityHierarchy.pinned.badge", { name: placement.item.node.title })}
           </Badge>
         )}
+        <BulkChangeButton
+          size="xs"
+          blueprint={singleVisibleBlueprint(filters.values.blueprints, activeBlueprints)}
+          q={filters.values.q}
+          team={filters.values.team}
+        />
       </EntityGraphToolbar>
 
       {isError && refusedRun.length === 0 && (
