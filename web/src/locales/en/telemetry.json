@@ -63,7 +63,8 @@
     },
     "table": {
       "catalog_files": "Catalog files",
-      "catalog_file_events": "History events",
+      "catalog_file_events": "File history events",
+      "entity_events": "Entity history events",
       "blueprints": "Blueprints",
       "entities": "Entities",
       "conversion_mappings": "Conversion mappings",

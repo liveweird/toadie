@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link as RouterLink } from "react-router-dom";
-import { Alert, Button, Grid, Group, Paper, Stack, Text } from "@mantine/core";
+import { Alert, Button, Grid, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import type { UseFormReturnType } from "@mantine/form";
 import type { Blueprint } from "../api/blueprints";
 import type { EntityFinding } from "../api/entities";
@@ -38,6 +38,7 @@ export default function EntityEditor({
   computedTeam = [],
   computed,
   actions,
+  history,
 }: {
   title: string;
   submitLabel: string;
@@ -55,6 +56,9 @@ export default function EntityEditor({
   /** The whole-entity operations (2.9.0 — Sync from source) — absent on create, since a
    *  brand-new entity has no stored state to act on (the `CatalogFileEditor` `actions` idiom). */
   actions?: ReactNode;
+  /** The entity's change history — edit-only like [actions] (a brand-new entity has none), in a
+   *  full-width section under the two columns (the `CatalogFileEditor` `history` idiom). */
+  history?: ReactNode;
 }) {
   const { t } = useTranslation();
   const preview = JSON.stringify(toEntityRequest(form.values, blueprint), null, 2);
@@ -123,6 +127,16 @@ export default function EntityEditor({
             <CodePreviewCard title={t("entities.preview")} label={t("entities.preview")} text={preview} />
           </Stack>
         </Grid.Col>
+        {history && (
+          <Grid.Col span={12}>
+            <Paper withBorder p="lg" radius="md">
+              <Stack>
+                <Title order={3}>{t("common.history.title")}</Title>
+                {history}
+              </Stack>
+            </Paper>
+          </Grid.Col>
+        )}
       </Grid>
     </Stack>
   );

@@ -17,6 +17,7 @@ const GROUP_KEYS: Record<string, ParseKeys> = {
 const TABLE_KEYS: Record<string, ParseKeys> = {
   catalog_files: "telemetry.workspace.table.catalog_files",
   catalog_file_events: "telemetry.workspace.table.catalog_file_events",
+  entity_events: "telemetry.workspace.table.entity_events",
   blueprints: "telemetry.workspace.table.blueprints",
   entities: "telemetry.workspace.table.entities",
   conversion_mappings: "telemetry.workspace.table.conversion_mappings",

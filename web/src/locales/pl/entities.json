@@ -136,5 +136,27 @@
     "jsonInvalid": "Podaj prawidłowy JSON",
     "objectShape": "Podaj adres URL i opcjonalnie tekst wyświetlany — nic więcej",
     "sourceUrl": "Musi być bezwzględnym adresem https bez danych uwierzytelniających"
+  },
+  "event": {
+    "created": "Utworzono encję.",
+    "createdImport": "Utworzono encję przez import.",
+    "updated": "Zaktualizowano encję: {{fields}}.",
+    "updatedImport": "Zaktualizowano encję przez import: {{fields}}.",
+    "updatedImportDeferred": "Zaktualizowano encję przez import (odłożone odwołania): {{fields}}.",
+    "updatedCascade": "Zaktualizowano encję po zmianie nazwy z „{{from}}” na „{{to}}” ({{blueprint}}): {{fields}}.",
+    "synced": "Zsynchronizowano ze źródła — bez zmian.",
+    "syncedChanges": "Zsynchronizowano ze źródła: {{fields}}.",
+    "deleted": "Usunięto encję."
+  },
+  "history": {
+    "more_one": "…i jeszcze {{count}} pole",
+    "more_few": "…i jeszcze {{count}} pola",
+    "more_many": "…i jeszcze {{count}} pól",
+    "more_other": "…i jeszcze {{count}} pola",
+    "cascaded_one": "Zaktualizowano {{count}} odwołującą się encję",
+    "cascaded_few": "Zaktualizowano {{count}} odwołujące się encje",
+    "cascaded_many": "Zaktualizowano {{count}} odwołujących się encji",
+    "cascaded_other": "Zaktualizowano {{count}} odwołującej się encji",
+    "preHistory": "{{name}} utworzył/a encję {{date}}, zanim zaczęto zapisywać historię zmian. Wcześniejsze zmiany nie są widoczne."
   }
 }

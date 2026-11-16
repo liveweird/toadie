@@ -64,6 +64,12 @@ describe("CreateEntity page", () => {
     expect(screen.getByLabelText(/^Identifier/)).toBeInTheDocument();
   });
 
+  test("no History section renders on create — a brand-new entity has none", async () => {
+    renderCreate("/entities/new?blueprint=service");
+    await screen.findByLabelText(/^Identifier/);
+    expect(screen.queryByRole("heading", { name: "History" })).not.toBeInTheDocument();
+  });
+
   test("no Computed section renders on create, even for a blueprint declaring computed properties", async () => {
     renderCreate("/entities/new?blueprint=service");
     await screen.findByLabelText(/^Identifier/);

@@ -254,3 +254,15 @@ export async function syncEntity(id: number, document: EntityBody, expectedSourc
     body: JSON.stringify({ document, expectedSourceUrl }),
   });
 }
+
+export type EntityEventPage =
+  paths["/api/v1/entities/{id}/events"]["get"]["responses"]["200"]["content"]["application/json"];
+export type EntityEvent = EntityEventPage["items"][number];
+
+/**
+ * The entity's change history, newest first (server-ordered — never re-sort it client-side).
+ * Structural rows: the SPA renders `type` + `params` in the viewer's language.
+ */
+export async function listEntityEvents(id: number, page: number, pageSize: number): Promise<EntityEventPage> {
+  return jsonRequest<EntityEventPage>(`/api/v1/entities/${id}/events?${buildQuery({ page, pageSize })}`);
+}
