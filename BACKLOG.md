@@ -65,15 +65,16 @@ promotes it. A finished item is removed, not ticked.
   (`GET /api/v1/entities/{id}/events`); the MCP catalogue is a fixed ten tools. Add a read-scope tool
   returning the same paged events when an agent needs to ask who changed what.
 
-- [new] **Bulk change of one property across entities of the same blueprint.** Requested
-  2026-11-16, to follow the entity change history. A "Bulk change" button on the Entities, Entity
-  graph and Entity hierarchy views opens a new view shaped like Entity hierarchy, except that the
-  Blueprints pill row allows exactly one blueprint and every row has a checkbox. "Confirm" opens a
-  form asking which property to change and to what value; the value input follows that property's
-  schema type. Each changed entity is an ordinary strict entity write, so it gets its own history
-  event and audit line, and a row that fails validation is reported and skipped rather than failing
-  the batch. To decide before promoting: whether computed or relation fields are offered, clearing a
-  value, the batch cap (the import's 200?), and a dry-run preview of what will change.
+- [new] **Bulk change over more than 200 entities.** 2.38.0 caps one bulk change at 200
+  entities in one request (the import's cap) and disables Confirm above it. Larger selections would
+  need client-side chunking into 200-entity requests with progress and partial-failure reporting.
+
+- [new] **An MCP bulk-change tool.** 2.38.0 serves bulk change over REST only. The service
+  function takes a caller id, so a write-scope tool beside `import_entities` would be thin.
+
+- [new] **Bulk-clear a key the blueprint no longer declares.** 2.38.0 offers only currently declared
+  properties and relations; a stale stored key (an entity left behind by a blueprint edit) can only be
+  cleared entity by entity in the editor.
 
 ## Housekeeping
 
