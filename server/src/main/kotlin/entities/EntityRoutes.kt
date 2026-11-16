@@ -8,6 +8,8 @@ import ch.nokillswit.blueprints.blueprintJson
 import ch.nokillswit.entityquery.EntityQueryCheckRequest
 import ch.nokillswit.entityquery.EntityQueryCheckResponse
 import ch.nokillswit.entityquery.MAX_QUERY_LENGTH
+import ch.nokillswit.infra.db.EVENT_LOG_DEFAULT_SORT
+import ch.nokillswit.infra.db.EVENT_LOG_SORT_FIELDS
 import ch.nokillswit.infra.fetch.fetchForCaller
 import ch.nokillswit.infra.fetch.UrlFetcher
 import ch.nokillswit.infra.fetch.UrlFetcherKey
@@ -47,6 +49,11 @@ class EntitiesRoute {
         @Serializable
         @Resource("sync")
         class Sync(val parent: Id)
+
+        // 2.37.0 (V51): the entity's change history — the `CatalogFiles.Id.Events` twin.
+        @Serializable
+        @Resource("events")
+        class Events(val parent: Id)
     }
 
     // A literal segment beats {id} in Ktor's route resolution (the CatalogFiles.Graph idiom).
@@ -94,6 +101,7 @@ private suspend inline fun <reified T> ApplicationCall.respondEntity(status: Htt
 
 fun Application.configureEntityRoutes() {
     val entityService = attributes[EntityServiceKey]
+    val eventService = attributes[EntityEventServiceKey]
     // Stateless, no DB — constructed here rather than in the composition root, the
     // `catalog/CatalogFileRoutes.kt` idiom (same shared `UrlFetcherKey` test seam).
     val urlFetcher by lazy { attributes.getOrNull(UrlFetcherKey) ?: UrlFetcher() }
@@ -188,6 +196,15 @@ fun Application.configureEntityRoutes() {
                 }
                 audit("entity.updated", *fields.toTypedArray())
                 call.respond(HttpStatusCode.NoContent)
+            }
+            get<EntitiesRoute.Id.Events> { route ->
+                call.caller()
+                // Whoever may read the entity may read its history — in this shared workspace, every authenticated user. A missing
+                // or soft-deleted entity is the plain 404; `exists` is a one-column lookup, never `read` (computed properties, ledger).
+                entityService.exists(route.parent.id).takeIf { it }.orNotFound("Entity")
+                val paging = call.parsePaging(sortable = EVENT_LOG_SORT_FIELDS, defaultSort = EVENT_LOG_DEFAULT_SORT)
+                val result = eventService.listForEntity(route.parent.id, paging)
+                call.respondEntity(HttpStatusCode.OK, paging.toPage(result.items, result.total))
             }
             get<EntitiesRoute.Id.Sync> { route ->
                 call.caller()

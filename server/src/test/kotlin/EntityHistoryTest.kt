@@ -7,6 +7,7 @@ import ch.nokillswit.blueprints.RelationDefinition
 import ch.nokillswit.blueprints.SYSTEM_TEAM_BLUEPRINT
 import ch.nokillswit.blueprints.SYSTEM_USER_BLUEPRINT
 import ch.nokillswit.blueprints.blueprintJson
+import ch.nokillswit.entities.EntityEventPageResponse
 import ch.nokillswit.entities.EntityEventResponse
 import ch.nokillswit.entities.EntityEventType
 import ch.nokillswit.entities.EntityRequest
@@ -14,7 +15,11 @@ import ch.nokillswit.entities.EntityService
 import ch.nokillswit.entities.import
 import ch.nokillswit.entities.syncFromSource
 import ch.nokillswit.infra.importing.OntologyImportStatus
+import ch.nokillswit.users.UserService.GuardedMutation
 import ch.nokillswit.users.UserRole
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.testApplication
 import java.sql.DriverManager
 import java.util.UUID
@@ -563,6 +568,120 @@ class EntityHistoryTest {
             // A second delete of the soft-deleted row writes nothing.
             assertEquals(0, service.delete(created.id, deleter).affected)
             assertEquals(2, TestEntityEvents.count(created.id))
+        } finally {
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    // ---- GET /api/v1/entities/{id}/events ---------------------------------------------------------------------------------
+
+    @Test
+    fun `the events route lists newest first with the acting user resolved`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("ehist-route-reader")
+        val reader = TestUsers.seed(email, "pw", name = "Reader", role = UserRole.USER)
+        val client = authedClient(email, "pw")
+        val editorEmail = uniqueEmail("ehist-route-editor")
+        val editor = TestUsers.seed(editorEmail, "pw", name = "Editor Person", role = UserRole.USER)
+        val bpId = unique("bp-ehist-route")
+        val entId = unique("ent-ehist-route")
+        try {
+            simpleBlueprint(bpId, reader)
+            val created = service.create(request(bpId, entId), reader)
+            service.update(created.id, request(bpId, entId, title = "Edited"), editor)
+
+            val page: EntityEventPageResponse = client.get("/api/v1/entities/${created.id}/events").body()
+            assertEquals(2, page.total)
+            assertEquals(listOf(EntityEventType.UPDATED, EntityEventType.CREATED), page.items.map { it.type })
+            val (update, creation) = page.items
+            assertEquals(editor, update.userId)
+            assertEquals("Editor Person", update.userName)
+            assertEquals(created.id, update.entityId)
+            assertEquals("Reader", creation.userName)
+            assertEquals(listOf("title"), update.changed())
+            assertFalse(update.userDeleted)
+            assertFalse(update.userServiceAccount)
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `the events route flags a soft-deleted actor and a service account`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("ehist-route-flags")
+        val reader = TestUsers.seed(email, "pw", name = "Reader", role = UserRole.USER)
+        val client = authedClient(email, "pw")
+        val leaver = TestUsers.seed(uniqueEmail("ehist-route-leaver"), "pw", name = "Leaver", role = UserRole.USER)
+        val serviceAccount = TestUsers.seedServiceAccount("ehist-route-client", uniqueEmail("ehist-route-svc"))
+        val bpId = unique("bp-ehist-route-flags")
+        val entId = unique("ent-ehist-route-flags")
+        try {
+            simpleBlueprint(bpId, reader)
+            val created = service.create(request(bpId, entId), serviceAccount)
+            service.update(created.id, request(bpId, entId, title = "By the leaver"), leaver)
+            assertEquals(GuardedMutation.DONE, TestUsers.service.deleteGuarded(leaver))
+
+            val items = client.get("/api/v1/entities/${created.id}/events").body<EntityEventPageResponse>().items
+            val byLeaver = items.first { it.userId == leaver }
+            assertTrue(byLeaver.userDeleted && !byLeaver.userServiceAccount, byLeaver.toString())
+            assertEquals("Leaver", byLeaver.userName, "the recorded name is still shown")
+            val bySvc = items.first { it.userId == serviceAccount }
+            assertTrue(bySvc.userServiceAccount && !bySvc.userDeleted, bySvc.toString())
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `the events route pages, sorts within the whitelist and rejects any other sort field`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("ehist-route-paging")
+        val user = TestUsers.seed(email, "pw", role = UserRole.USER)
+        val client = authedClient(email, "pw")
+        val bpId = unique("bp-ehist-route-paging")
+        val entId = unique("ent-ehist-route-paging")
+        try {
+            simpleBlueprint(bpId, user)
+            val created = service.create(request(bpId, entId), user)
+            repeat(3) { service.update(created.id, request(bpId, entId, title = "v$it"), user) }
+            val base = "/api/v1/entities/${created.id}/events"
+
+            val second: EntityEventPageResponse = client.get("$base?page=2&pageSize=3").body()
+            assertEquals(4, second.total)
+            assertEquals(1, second.items.size)
+            assertEquals(EntityEventType.CREATED, second.items.single().type, "page 2 of the newest-first order holds the oldest")
+
+            val ascending: EntityEventPageResponse = client.get("$base?sort=timestamp,id").body()
+            assertEquals(EntityEventType.CREATED, ascending.items.first().type)
+            assertEquals(ascending.items.map { it.id }, ascending.items.map { it.id }.sorted())
+
+            assertEquals(HttpStatusCode.BadRequest, client.get("$base?sort=title").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("$base?sort=userName").status)
+        } finally {
+            TestEntities.remove(entId)
+            TestBlueprints.remove(bpId)
+        }
+    }
+
+    @Test
+    fun `the events route is a plain 404 for an unknown or soft-deleted entity`() = testApplication {
+        usePostgresTestcontainer()
+        val email = uniqueEmail("ehist-route-404")
+        val user = TestUsers.seed(email, "pw", role = UserRole.USER)
+        val client = authedClient(email, "pw")
+        val bpId = unique("bp-ehist-route-404")
+        val entId = unique("ent-ehist-route-404")
+        try {
+            simpleBlueprint(bpId, user)
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/entities/999999999/events").status)
+            val created = service.create(request(bpId, entId), user)
+            assertEquals(HttpStatusCode.OK, client.get("/api/v1/entities/${created.id}/events").status)
+            service.delete(created.id, user)
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/v1/entities/${created.id}/events").status)
+            assertEquals(2, TestEntityEvents.count(created.id), "...although the history itself is kept")
         } finally {
             TestBlueprints.remove(bpId)
         }

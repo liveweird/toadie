@@ -633,6 +633,16 @@ changes or clears the reference before sync obtains its write lock, sync refuses
 does not authenticate the submitted document's provenance or prevent unrelated concurrent
 document edits.
 
+- **Entity change history (2.37.0, V51)** — every write to an entity appends an immutable, structural
+  event (`entity_events`: CREATED / UPDATED / SYNCED / DELETED, the catalog file history one level
+  up), served by the paged `GET /api/v1/entities/{id}/events` to any authenticated user. The diff
+  covers STORED fields only — `identifier`, `title`, `icon`, `team`, `properties.<id>`,
+  `relations.<id>` and the `sourceUrl` pseudo-field, never computed values — with document text
+  (`yaml`/`markdown`/`proto` formats, an inline `spec`, a property the blueprint no longer declares)
+  recorded as the bare fact of a change. A rename's cascade rewrites mint one UPDATED
+  (`origin=cascade`) per referrer. Rules and bounds: `persistence.md` V51 and "Entity mutations and
+  product history"; the wire shape is `EntityEventResponse` in `documentation.yaml`.
+
 ## System blueprints (V31)
 
 Toadie seeds exactly two system blueprints — `_team` and `_user` — flagged `system: true` on the

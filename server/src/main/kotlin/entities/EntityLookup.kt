@@ -9,6 +9,7 @@ import org.jetbrains.exposed.v1.core.LowerCase
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.stringParam
+import org.jetbrains.exposed.v1.r2dbc.select
 import org.jetbrains.exposed.v1.r2dbc.selectAll
 import org.jetbrains.exposed.v1.r2dbc.transactions.suspendTransaction
 
@@ -39,6 +40,14 @@ suspend fun EntityService.findByIdentity(blueprint: String, identifier: String):
             }
             .map { it[EntityService.Entities.id].value }
             .singleOrNull()
+    }
+
+/** Whether an ACTIVE entity holds [id] — a one-column lookup (no document decode, no computed properties, no read ledger). */
+suspend fun EntityService.exists(id: UInt): Boolean =
+    suspendTransaction(database) {
+        EntityService.Entities.select(EntityService.Entities.id)
+            .where { (EntityService.Entities.id eq id) and active() }
+            .singleOrNull() != null
     }
 
 /** The V39 ontology-revision counter, read outside any lock (`.claude/docs/persistence.md` "Ontology revision (V39)"). */

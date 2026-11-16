@@ -2567,6 +2567,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/entities/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List an entity's change history
+         * @description The entity's immutable audit trail — one entry per creation (the import loop and MCP
+         *     writes included), edit, HTTP re-sync, rename-cascade rewrite of a reference, and
+         *     deletion — newest first (`timestamp` descending, `id` descending as the same-instant
+         *     tiebreaker).
+         *
+         *     Every event commits in the same transaction as the entity write it records, so a
+         *     stored change can never lack its event. Each entry is STRUCTURAL: an event `type`
+         *     plus a `params` map, with the acting user resolved to `userName` (and flagged when
+         *     that account was since deleted, or is an integration client's service account). No
+         *     rendered string is stored — clients localize the description. Any authenticated user
+         *     may read it: whoever may read the entity may read its history, and in this shared
+         *     workspace that is everyone. A missing or soft-deleted entity is a `404`. A pure read:
+         *     no audit event.
+         *
+         *     Events are server-generated as a side-effect of the mutations; there is no create,
+         *     update or delete operation. A save that changed nothing records nothing; a sync is
+         *     recorded even when the remote copy matched. Entities that predate change history
+         *     simply have no `CREATED` entry. There is no retention: the history is never pruned.
+         *
+         *     Sortable fields: `timestamp`, `id`. Unlike the other lists this one defaults to
+         *     `-timestamp,-id`.
+         */
+        get: operations["listEntityEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/entities/{id}/sync": {
         parameters: {
             query?: never;
@@ -3993,6 +4035,67 @@ export interface components {
              */
             expectedSourceUrl?: string;
         };
+        EntityEventResponse: {
+            /** Format: int32 */
+            id: number;
+            /** Format: int32 */
+            entityId: number;
+            /** Format: int32 */
+            userId: number;
+            /** @description Display name of the account that made the change. Server-resolved, read-only. */
+            userName: string;
+            /** @description The acting account has since been soft-deleted (the recorded name is still shown). */
+            userDeleted: boolean;
+            /** @description The acting account is an integration client's service account — the change arrived through the MCP endpoint. */
+            userServiceAccount: boolean;
+            /**
+             * Format: int64
+             * @description Epoch milliseconds when the event was recorded. Server-managed.
+             */
+            timestamp: number;
+            /**
+             * @description Structured event kind; the client renders it in the viewer's language. DELETED entries exist for the record but are unreachable through the API — the entity they belong to is gone from every read.
+             * @enum {string}
+             */
+            type: "CREATED" | "UPDATED" | "SYNCED" | "DELETED";
+            /**
+             * @description Interpolation params for the localized rendering. `CREATED` carries `blueprint`.
+             *     `origin` marks how the write arrived when it was not an ordinary edit: `import`
+             *     (the bulk import, the conversion import and every MCP write), `import-deferred`
+             *     (the import's second pass restoring the references the first pass withheld) or
+             *     `cascade` (a referrer rewritten because another entity was renamed; carries
+             *     `causeEntityId`, `causeBlueprint`, `causeFrom` and `causeTo`). A renamed entity's
+             *     own event carries `cascaded`, the number of referrers rewritten.
+             *
+             *     `UPDATED` and `SYNCED` carry the field-level diff: `changed` comma-joins the
+             *     changed field paths in document order (`identifier`, `title`, `icon`, `team`,
+             *     `properties.<id>`, `relations.<id>`, plus the `sourceUrl` pseudo-field for the
+             *     source reference), and each path may be followed by `<path>.from`/`<path>.to`
+             *     (scalars) or `<path>.added`/`<path>.removed` (lists of scalars, comma-joined). At
+             *     most 40 paths are listed; `more` counts the rest.
+             *
+             *     A path in `changed` with NO companion keys is recorded by name only: document
+             *     text (properties whose format is yaml, markdown or proto, or that carry an inline
+             *     `spec`), a property the blueprint no longer declares, objects, lists of objects,
+             *     list items containing a comma, any value over 200 characters, a list whose entries
+             *     were duplicated or reshaped without a different member, and every value once the
+             *     event's 4,000-character value budget is spent. `DELETED` carries no params;
+             *     `SYNCED` carries none when the remote copy matched.
+             */
+            params: {
+                [key: string]: string;
+            };
+        };
+        EntityEventPage: {
+            items: components["schemas"]["EntityEventResponse"][];
+            page: number;
+            pageSize: number;
+            /**
+             * Format: int64
+             * @description Event count before pagination.
+             */
+            total: number;
+        };
         EntityPage: {
             items: components["schemas"]["Entity"][];
             page: number;
@@ -4602,7 +4705,7 @@ export interface components {
             name: string;
             /**
              * Format: int64
-             * @description Active rows (all rows for the append-only `catalog_file_events`).
+             * @description Active rows (all rows for the append-only `catalog_file_events` and `entity_events`).
              */
             count: number;
         };
@@ -7879,6 +7982,44 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalServerError"];
             502: components["responses"]["BadGateway"];
+        };
+    };
+    listEntityEvents: {
+        parameters: {
+            query?: {
+                /** @description 1-based page index. Defaults to 1. */
+                page?: components["parameters"]["Page"];
+                /** @description Rows per page. Defaults to 20, maximum 100. */
+                pageSize?: components["parameters"]["PageSize"];
+                /**
+                 * @description Sort spec. Format: `field` (ascending) or `-field` (descending). Multiple fields are
+                 *     comma-separated, leftmost wins: `sort=-updatedAt,name`. The endpoint declares its
+                 *     sortable-field whitelist; unknown fields are rejected with `400`. `id` ascending is
+                 *     always appended as a deterministic tiebreaker.
+                 */
+                sort?: components["parameters"]["Sort"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entity's events, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntityEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     getEntitySyncState: {
