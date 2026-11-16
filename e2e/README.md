@@ -188,6 +188,10 @@ from Lettuce, that any new or edited spec must satisfy:
   throwaway `e2e-eqs-*`-named saved entity query (deleted mid-journey), and one throwaway
   regular user (run as the seed admin, with a second browser context signed in as that
   throwaway user for the foreign-public-query half);
+  `entity-bulk-change` owns, per journey, one throwaway `e2e-ebulk-*` parent blueprint with one
+  entity and one child blueprint (an enum property and a `parent` relation mapped in
+  `hierarchyRelations` to the dictionary's first hierarchy, which it only READS) with three
+  entities (run as the seed admin — entities carry no admin gate);
   `responsive-layout` owns one throwaway `e2e-layout-*` blueprint and six entities in a parent
   chain; its other screen checks are read-only;
   `entity-errors` owns one throwaway `e2e-ee-*` blueprint, its one `e2e-ee-*` entity, and its
@@ -263,7 +267,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries),
   `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0), and
   `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0),
-  `entity-history.spec.ts` (`e2e-ehist-*` — the per-entity change trail, 2.37.0), and
+  `entity-history.spec.ts` (`e2e-ehist-*` — the per-entity change trail, 2.37.0),
+  `entity-bulk-change.spec.ts` (`e2e-ebulk-*` — bulk change of one field, 2.38.0), and
   `tiers.spec.ts` (`e2e-tier-*` — fill-in tiers, 2.18.0), `backstage-export.spec.ts` (`e2e-be-*` —
   conversion phase 5b), and `backstage-import.spec.ts` (`e2e-bi-*` — conversion phase 5c); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
@@ -271,7 +276,7 @@ from Lettuce, that any new or edited spec must satisfy:
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
   `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-layout-*`, `e2e-eqs-*`, `e2e-ee-*`,
-  `e2e-esync-*`, `e2e-ehist-*`, `e2e-be-*`, `e2e-bi-*` today) and is removed by that same spec
+  `e2e-esync-*`, `e2e-ehist-*`, `e2e-ebulk-*`, `e2e-be-*`, `e2e-bi-*` today) and is removed by that same spec
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
@@ -364,7 +369,7 @@ the same commit** — this list is the coverage map, the scenario file is the de
 
 - [`accessibility.spec.ts`](scenarios/accessibility.md) — axe WCAG A/AA smoke: login + the
   authenticated pages (`/hierarchy`, `/files`, `/files/new`, `/files/import`, `/errors`,
-  `/graph`, `/blueprints`, `/blueprints/new`, `/entities`, `/entity-graph`,
+  `/graph`, `/blueprints`, `/blueprints/new`, `/entities`, `/entities/bulk-change?blueprint=_team`, `/entity-graph`,
   `/entity-hierarchy`, `/ontology/import`, `/labels`, `/annotations`, `/tags`, `/types`,
   `/lifecycles`, `/namespaces`, `/hierarchies`, `/users`, `/changelog`), plus an explicitly
   held Errors loading state and its completed report, plus reset confirmation/missing-link
@@ -567,6 +572,16 @@ the same commit** — this list is the coverage map, the scenario file is the de
   sentence names the changed envelope field and both properties by their blueprint titles
   while only the valued ones (title, enum) get a from → to line — the markdown property is
   recorded by name only and its text never reaches the section.
+- [`entity-bulk-change.spec.ts`](scenarios/entity-bulk-change.md) — bulk change of one field across
+  a blueprint's entities (2.38.0, `/entities/bulk-change`): an API-seeded parent with three
+  children (an enum Stage, two at alpha, one at beta) → from the Entities page the Bulk change
+  link carries the picked child blueprint to the view, the parent's group checkbox selects its
+  three children, the modal sets Stage to beta and its preview predicts 2 updates and 1 unchanged,
+  Apply reports 2 updated and the finished rows leave the selection, and an updated child's editor
+  History names the bulk change with a "Stage: alpha → beta" line; a second journey edits one of
+  the to-be-updated children through the API between the preview and the apply: that row comes back
+  Stale and stays selected, its API edit is kept, the other updates → cleanup. Owns only its own
+  `e2e-ebulk-*` rows.
 - [`i18n.spec.ts`](scenarios/i18n.md) — the synced per-user language: a throwaway user
   switches to Polish, the choice survives a reload AND a wiped-device re-login (served from
   the stored value), and the admin's English flips it back; seeded accounts stay English.
