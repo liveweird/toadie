@@ -109,11 +109,11 @@ Run the scan locally with the CI image: copy the lockfiles into a temp tree (`gr
   and on `workflow_dispatch`; a newly published advisory can turn it red with no code change - the
   OS-layer twin of the advisory-floors rule above).
 - **Requirement:** move the runtime stage to the newest CLEAN base image for the SAME Java update,
-  a respin tag (`21.0.12.N_M`) included: a new digest of the same tag is often not enough. Find
+  a respin tag (`21.0.13.N_M`) included: a new digest of the same tag is often not enough. Find
   candidates with `docker buildx imagetools inspect eclipse-temurin:<tag>-jre` (take the multi-arch
   INDEX digest) or the Docker Hub tag list, and re-scan the candidate locally with the script's Trivy
   flags before pinning it.
-- **Requirement:** a later update (`21.0.13.x`) is a `mise.toml` / toolchain decision first (the JDK
+- **Requirement:** a later update (`21.0.14.x`) is a `mise.toml` / toolchain decision first (the JDK
   stage, mise and CI move together), never a runtime-only jump. The JDK build stage stays on the
   mise/CI Java build; only the runtime JRE may run a same-update respin ahead of it.
 - **Requirement:** never a `.trivyignore`, a severity downgrade or a skipped job.
