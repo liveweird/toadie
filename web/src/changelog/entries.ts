@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "2.37.0",
+    date: "2026-11-16",
+    en: `**Every entity keeps its history.** The entity editor gains a History section that lists every change to the entity: who made it, when, and which fields changed, with each value's old and new state (Title: Storefront Web → Storefront Web (shop)) and the items a list gained or lost. Edits, imports, MCP writes, syncs from the source and deletions are all recorded; renaming an entity also records the change on every entity that referred to it, naming the rename that caused it. Writes by an integration client carry its name. Document text (Markdown, YAML, proto) and inline API definitions are recorded only as the fact that they changed, never their content, and a save that changes nothing records nothing. History starts with this release: an older entity shows when it was created and that earlier changes were not recorded.`,
+    pl: `**Każda encja ma swoją historię.** Edytor encji zyskuje sekcję Historia, która pokazuje każdą zmianę encji: kto ją wprowadził, kiedy i które pola się zmieniły, wraz z poprzednią i nową wartością (Tytuł: Storefront Web → Storefront Web (shop)) oraz elementami dodanymi do listy lub z niej usuniętymi. Zapisywane są edycje, importy, zapisy przez MCP, synchronizacje ze źródła i usunięcia; zmiana identyfikatora encji zapisuje też zmianę w każdej encji, która się do niej odwoływała, z informacją, która zmiana nazwy ją spowodowała. Zapisy klienta integracyjnego są podpisane jego nazwą. Tekst dokumentów (Markdown, YAML, proto) i osadzone definicje API są zapisywane tylko jako fakt zmiany, nigdy ich treść, a zapis, który niczego nie zmienia, nie trafia do historii. Historia zaczyna się od tego wydania: starsza encja pokazuje, kiedy ją utworzono, i że wcześniejszych zmian nie zapisano.`,
+  },
+  {
     version: "2.36.1",
     date: "2026-11-16",
     en: `**Java security update.** Toadie now builds, tests and runs its server on Temurin 21.0.13, the October Java update, and its runtime image carries Ubuntu's fixed apt package (CVE-2026-109518). Nothing changes in how Toadie looks or behaves.`,
