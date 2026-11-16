@@ -54,6 +54,16 @@ promotes it. A finished item is removed, not ticked.
 
 - [new] **Adoption/relation consistency as Errors-report rows.** 2.36.0 ships the check as four PUBLIC sample saved queries (NOT EXISTS over the consumes_* relation and the adoption pair, both directions). What remains is surfacing a saved query's non-empty result on Port Errors without naming the ontology — which means EVALUATING chosen saved queries inside the report, against its never-evaluates rule and the entity-query budget/permits. Decide the mechanism (a "check" flag on saved queries + a per-report evaluation cap) before promoting.
 
+- [new] **Bulk change of one property across entities of the same blueprint.** Requested
+  2026-11-16, to follow the entity change history. A "Bulk change" button on the Entities, Entity
+  graph and Entity hierarchy views opens a new view shaped like Entity hierarchy, except that the
+  Blueprints pill row allows exactly one blueprint and every row has a checkbox. "Confirm" opens a
+  form asking which property to change and to what value; the value input follows that property's
+  schema type. Each changed entity is an ordinary strict entity write, so it gets its own history
+  event and audit line, and a row that fails validation is reported and skipped rather than failing
+  the batch. To decide before promoting: whether computed or relation fields are offered, clearing a
+  value, the batch cap (the import's 200?), and a dry-run preview of what will change.
+
 ## Housekeeping
 
 - [new] **Re-check the MCP transport facts on the first MCP Kotlin SDK bump.** The SDK is pinned
