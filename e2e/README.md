@@ -262,7 +262,8 @@ from Lettuce, that any new or edited spec must satisfy:
   `responsive-layout.spec.ts` (`e2e-layout-*`; one self-related blueprint and six entities),
   `entity-queries.spec.ts` (`e2e-eqs-*` — phase 7, v2.1.0, saved entity queries),
   `entity-errors.spec.ts` (`e2e-ee-*` — the Ontology Errors report, v2.5.0), and
-  `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0), and
+  `entity-sync.spec.ts` (`e2e-esync-*` — entity source references & re-sync, 2.9.0),
+  `entity-history.spec.ts` (`e2e-ehist-*` — the per-entity change trail, 2.37.0), and
   `tiers.spec.ts` (`e2e-tier-*` — fill-in tiers, 2.18.0), `backstage-export.spec.ts` (`e2e-be-*` —
   conversion phase 5b), and `backstage-import.spec.ts` (`e2e-bi-*` — conversion phase 5c); the
   registry has no seed to protect. Identifier uniqueness plus never touching a foreign row is
@@ -270,7 +271,7 @@ from Lettuce, that any new or edited spec must satisfy:
   writers rely on. **The entity store follows the same per-spec-ownership rule**: every entity
   a spec creates carries its own unique marker (`e2e-ent-*`, `e2e-eg-*`, `e2e-eh-*`,
   `e2e-oi-ent-*`, `e2e-eq-*`, `e2e-query-builder-*`, `e2e-layout-*`, `e2e-eqs-*`, `e2e-ee-*`,
-  `e2e-esync-*`, `e2e-be-*`, `e2e-bi-*` today) and is removed by that same spec
+  `e2e-esync-*`, `e2e-ehist-*`, `e2e-be-*`, `e2e-bi-*` today) and is removed by that same spec
   before it returns, so a future entity-creating spec can join safely as long as it never
   touches another spec's rows.
   `ontology-import.spec.ts`'s **Export JSON** step additionally downloads the WHOLE blueprint
@@ -561,6 +562,11 @@ the same commit** — this list is the coverage map, the scenario file is the de
 - [`history.spec.ts`](scenarios/history.md) — a file's change history on the editor: the
   creation entry, then an edit whose sentence names both changed fields while only the
   scalar gets a before/after line (free text is recorded as the bare fact).
+- [`entity-history.spec.ts`](scenarios/entity-history.md) — an entity's change history on its
+  editor (2.37.0, the Port twin of `history.spec.ts`): the creation entry, then an edit whose
+  sentence names the changed envelope field and both properties by their blueprint titles
+  while only the valued ones (title, enum) get a from → to line — the markdown property is
+  recorded by name only and its text never reaches the section.
 - [`i18n.spec.ts`](scenarios/i18n.md) — the synced per-user language: a throwaway user
   switches to Polish, the choice survives a reload AND a wiped-device re-login (served from
   the stored value), and the admin's English flips it back; seeded accounts stay English.
