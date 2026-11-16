@@ -455,7 +455,8 @@ ch.nokillswit
                         real run and the dry-run cannot drift);
                         CatalogFileEvents.kt — the history vocabulary: the event types, the pure
                         descriptor builders, and `documentChanges` (the generic field-level diff
-                        of two documents) + CatalogFileEventService.kt (the EventLogTable clone
+                        of two documents, encoded through infra/db/EventChanges.kt's shared
+                        FieldChange vocabulary) + CatalogFileEventService.kt (the EventLogTable clone
                         behind GET …/{id}/events — the editor's History section);
                         Errors.kt — the reference resolver + registry/stored-content checks
                         behind GET …/errors (the filterable workspace Errors report: soft

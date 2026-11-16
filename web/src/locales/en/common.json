@@ -122,5 +122,17 @@
       "upTo4": "Tiers 1–4"
     }
   },
-  "loading": "Loading…"
+  "loading": "Loading…",
+  "history": {
+    "title": "History",
+    "empty": "No history yet.",
+    "change": {
+      "fromTo": "{{label}}: {{from}} → {{to}}",
+      "set": "{{label}}: set to {{to}}",
+      "cleared": "{{label}}: cleared",
+      "added": "{{label}}: +{{added}}",
+      "removed": "{{label}}: −{{removed}}",
+      "addedRemoved": "{{label}}: +{{added}} −{{removed}}"
+    }
+  }
 }

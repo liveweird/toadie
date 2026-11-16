@@ -1,12 +1,10 @@
 import { useState } from "react";
-import LoadingBlock from "./LoadingBlock";
 import { useTranslation } from "react-i18next";
-import { Alert, Group, Pagination, Stack, Text, Timeline } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { ParseKeys, TFunction } from "i18next";
 import { listCatalogFileEvents, type CatalogFileEvent } from "../api/catalogFiles";
-import { formatDateTime } from "../utils/relativeTime";
-import { loadErrorMessage } from "../utils/saveError";
+import { changedPaths, changeLine } from "../utils/eventChanges";
+import EventTimeline from "./EventTimeline";
 
 const PAGE_SIZE = 10;
 
@@ -60,13 +58,9 @@ function fieldLabel(path: string, t: TFunction): string {
   return key ? t(key) : path;
 }
 
-function changedPaths(event: CatalogFileEvent): string[] {
-  return (event.params.changed ?? "").split(",").filter(Boolean);
-}
-
 /** The one localized sentence a timeline entry leads with. */
 function describeEvent(event: CatalogFileEvent, t: TFunction): string {
-  const fields = changedPaths(event)
+  const fields = changedPaths(event.params)
     .map((path) => fieldLabel(path, t))
     .join(", ");
   switch (event.type) {
@@ -86,35 +80,13 @@ function describeEvent(event: CatalogFileEvent, t: TFunction): string {
 }
 
 /**
- * One body line per changed field that carries VALUES. A field recorded by name only (free
- * text, a structured list, an over-long value) gets none — the sentence above already names it,
- * and a "Description: changed" line would only repeat it.
- */
-function changeLine(event: CatalogFileEvent, path: string, t: TFunction): string | null {
-  const label = fieldLabel(path, t);
-  const from = event.params[`${path}.from`];
-  const to = event.params[`${path}.to`];
-  const added = event.params[`${path}.added`];
-  const removed = event.params[`${path}.removed`];
-  if (added && removed) return t("catalog.change.addedRemoved", { label, added, removed });
-  if (added) return t("catalog.change.added", { label, added });
-  if (removed) return t("catalog.change.removed", { label, removed });
-  if (from && to) return t("catalog.change.fromTo", { label, from, to });
-  if (to) return t("catalog.change.set", { label, to });
-  if (from) return t("catalog.change.cleared", { label });
-  return null;
-}
-
-/**
  * A catalog file's change history: the server's structural events rendered in the viewer's
- * language, newest first (server-ordered — never re-sorted here).
- *
- * When a second entity gets a history, this component's spinner/error/empty/Timeline shell is
- * what to extract as Lettuce's shared `EventTimeline`; one copy does not earn the abstraction.
- * The rule that DOES carry over today: a failed load must never masquerade as an empty history.
+ * language, newest first (server-ordered — never re-sorted here). The spinner / error / empty /
+ * Timeline shell is the shared `EventTimeline`; this component keeps the query and the
+ * catalog-specific sentences and field labels.
  */
 export default function CatalogFileHistory({ fileId }: { fileId: number }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error } = useQuery({
     // Inside the ["catalogFiles"] prefix, so every catalog mutation refreshes the trail.
@@ -122,51 +94,25 @@ export default function CatalogFileHistory({ fileId }: { fileId: number }) {
     queryFn: () => listCatalogFileEvents(fileId, page, PAGE_SIZE),
   });
 
-  if (isLoading) return <LoadingBlock py="sm" />;
-  if (isError) {
-    return (
-      <Alert color="red" variant="light">
-        {loadErrorMessage(error, t)}
-      </Alert>
-    );
-  }
-  if (!data || data.items.length === 0) {
-    return (
-      <Text c="dimmed" size="sm">
-        {t("catalog.history.empty")}
-      </Text>
-    );
-  }
-
   return (
-    <Stack gap="sm">
-      <Timeline bulletSize={12} lineWidth={2}>
-        {data.items.map((event) => (
-          <Timeline.Item key={event.id} title={describeEvent(event, t)}>
-            {changedPaths(event)
-              .map((path) => changeLine(event, path, t))
-              .filter((line): line is string => line !== null)
-              .map((line) => (
-                <Text key={line} size="sm" c="dimmed">
-                  {line}
-                </Text>
-              ))}
-            <Text size="xs" c="dimmed">
-              {event.userName} · {formatDateTime(event.timestamp, i18n.language)}
-            </Text>
-          </Timeline.Item>
-        ))}
-      </Timeline>
-      {data.total > PAGE_SIZE && (
-        <Group justify="center">
-          <Pagination
-            size="sm"
-            value={page}
-            onChange={setPage}
-            total={Math.ceil(data.total / PAGE_SIZE)}
-          />
-        </Group>
-      )}
-    </Stack>
+    <EventTimeline
+      items={data?.items.map((event) => ({
+        key: event.id,
+        title: describeEvent(event, t),
+        lines: changedPaths(event.params)
+          .map((path) => changeLine(event.params, path, fieldLabel(path, t), t))
+          .filter((line): line is string => line !== null),
+        who: event.userName,
+        when: event.timestamp,
+      }))}
+      isLoading={isLoading}
+      isError={isError}
+      error={error}
+      emptyMessage={t("common.history.empty")}
+      page={page}
+      pageSize={PAGE_SIZE}
+      total={data?.total ?? 0}
+      onPageChange={setPage}
+    />
   );
 }

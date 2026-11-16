@@ -254,8 +254,6 @@
     "entry": "{{reference}}: {{message}}"
   },
   "history": {
-    "title": "Historia",
-    "empty": "Brak historii.",
     "labelField": "Etykieta „{{key}}”",
     "annotationField": "Adnotacja „{{key}}”"
   },
@@ -266,14 +264,6 @@
     "synced": "Zsynchronizowano z repozytorium — bez zmian.",
     "synced_changes": "Zsynchronizowano z repozytorium: {{fields}}.",
     "deleted": "Usunięto plik."
-  },
-  "change": {
-    "fromTo": "{{label}}: {{from}} → {{to}}",
-    "set": "{{label}}: ustawiono na {{to}}",
-    "cleared": "{{label}}: wyczyszczono",
-    "added": "{{label}}: +{{added}}",
-    "removed": "{{label}}: −{{removed}}",
-    "addedRemoved": "{{label}}: +{{added}} −{{removed}}"
   },
   "pin": {
     "action": "Przypnij",
